@@ -1,0 +1,58 @@
+# ruff.toml
+target-version = "py310" # Python version in your project
+
+exclude = [
+  ".venv",
+  "venv",
+  "__pypackages__",
+  "build",
+  "**/migrations",
+  "**/mocks/**",
+  "settings.py",
+  "__pycache__",
+  ".tox",
+  "*.pyc",
+  ".env",
+  "reports",
+  "dist",
+  "data",
+  "*.ipynb"
+]
+
+line-length = 200
+
+
+[lint]
+select = [
+  # pycodestyle
+  "E",
+  # Pyflakes
+  "F",
+  # isort
+  "I"
+]
+fixable = ["ALL"]
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[lint.mccabe]
+max-complexity = 5 # Change the number for your threshold
+
+
+[lint.isort]
+force-single-line = false
+known-first-party = ["lumis"]
+combine-as-imports = true
+force-sort-within-sections = true
+order-by-type = false
+section-order = ["future", "standard-library", "first-party", "local-folder", "third-party"]
+
+
+[lint.per-file-ignores]
+"__init__.py" = ["E402", "F401", "F403"]
+"**/{tests,docs,tools}/*" = ["E402"]
+
+[format]
+quote-style = "double" # Change to "single" if needed
+indent-style = "space"
