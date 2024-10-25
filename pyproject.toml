@@ -6,13 +6,19 @@ authors = ["Tarek Sanger <tarek.sanger@me.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.11"
 pydantic = "^2.7.1"
 openai = "^1.23.6"
 numpy = "^1.26.4"
 wikipedia = "^1.4.0"
 neo4j = "^5.20.0"
 pydantic-settings = "^2.5.2"
+spacy = "==3.7.5"
+asgiref = "^3.8.1"
+tenacity = "^9.0.0"
+langchain-core = "^0.3.12"
+spacy-experimental = "^0.6.4"
+nltk = "^3.9.1"
 
 
 [tool.poetry.group.dev.dependencies]
