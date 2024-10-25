@@ -67,14 +67,15 @@ class ReactAgent(BaseAgent[E]):
         llm: Optional[LLM] = None,
         tools: list[Callable] = [],
         memory: BaseMemory = SimpleMemory(),
+        parallel_tool_calls: bool = True,
         finish_condition_callback: Optional[Callable[[], Union[str, None]]] = None,
         logger: Optional[logging.Logger] = None,
         verbose: bool = False,
     ):
         super().__init__(llm=llm, tools=tools, memory=memory, verbose=verbose, logger=logger)
+        self.parallel_tool_calls = parallel_tool_calls
 
         self.finish_condition_callback = finish_condition_callback
-
         self.thoughts = []
 
     async def initialize(self, messages: list[ChatCompletionMessageParam] = []) -> Optional[ReActThought]:
@@ -176,6 +177,7 @@ class ReactAgent(BaseAgent[E]):
         except Exception as e:
             self.log_exception(e)
             self.logger.exception("Error occurred during step execution")
+            await self.emit("error", self)
             return None
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=0.5, max=3), reraise=True)
@@ -226,7 +228,7 @@ class ReactAgent(BaseAgent[E]):
         await self.emit("before_act", self)
         try:
             messages = self.memory.get()  # Assuming `get` retrieves all messages
-            await self.call_tool(messages=messages)
+            await self.call_tool(messages=messages, parallel_tool_calls=self.parallel_tool_calls)
             self.logger.info("Agent act completed successfully.")
             await self.emit("after_act", self)
             return None

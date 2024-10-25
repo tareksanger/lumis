@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Any, Callable, Coroutine, Literal, Optional, Protocol, TypeVar, Union
 
-from lumis.agents.base.event_emitter import EventEmitter
+from lumis.common.event_emitter import EventEmitter
 from lumis.common.logger_mixin import LoggerMixin
 from lumis.llm.openai_llm import LLM
 from lumis.memory import BaseMemory, SimpleMemory
@@ -178,7 +178,8 @@ class BaseAgent(EventEmitter[E], LoggerMixin, ABC):
             if tool_call_message and hasattr(tool_call_message, "tool_calls") and tool_call_message.tool_calls:
                 self.logger.debug("Received tool call message")
                 message = ChatCompletionAssistantMessageParam(**tool_call_message.model_dump())
-                self.add_message(message)
+
+                self.memory.add(message)
                 tool_calls = tool_call_message.tool_calls
 
                 self.logger.debug(f"Processing {len(tool_calls)} tool calls")
@@ -203,10 +204,10 @@ class BaseAgent(EventEmitter[E], LoggerMixin, ABC):
                         except Exception as e:
                             self.log_exception(e, level=logging.ERROR)
                             tool_result_content = f"An error occurred while calling {function_name}"
-                        self.add_message(
+                        self.memory.add(
                             {
                                 "role": "tool",
-                                "content": tool_result_content,
+                                "content": str(tool_result_content),
                                 "tool_call_id": call.id,
                             }
                         )
@@ -222,6 +223,8 @@ class BaseAgent(EventEmitter[E], LoggerMixin, ABC):
         self.memory.add(message)
         if self.verbose:
             role = message.get("role", None)
+            if role == "tool":
+                return
             content = message.get("content", "unknown")
             name = message.get("name", None)
             tag = name if name is not None else self.agent_id if role not in ["system", "tool"] else role
