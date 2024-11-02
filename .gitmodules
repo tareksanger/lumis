@@ -1,0 +1,3 @@
+[submodule "packages/coreferee"]
+	path = packages/coreferee
+	url = https://github.com/richardpaulhudson/coreferee.git
