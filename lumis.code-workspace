@@ -1,7 +1,12 @@
 {
   "folders": [
     {
+      "name": "lumis",
       "path": "."
+    },
+    {
+      "name": "coreferee",
+      "path": "packages/coreferee"
     }
   ],
   "settings": {}
