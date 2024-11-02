@@ -8,7 +8,7 @@ from lumis.memory import BaseMemory, SimpleMemory
 
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, Field
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt
 
 
 class ReActThought(BaseModel):
@@ -41,7 +41,11 @@ E = Literal[
     "error",
     # Called only when the agent has been reset after all memory has been removed and everything else. This event is passed the agent as arguments.
     "reset",
+    # Max Steps is called when the agent reaches the maximum number of steps they can reach. This can be used to force a generation or an answer.
+    "max_steps_reached",
 ]
+
+DEFAULT_MAX_STEPS = 100
 
 
 class ReactAgent(BaseAgent[E]):
@@ -51,13 +55,13 @@ class ReactAgent(BaseAgent[E]):
 
     BASE_REACT_PROMPT: str = (
         "You will work step-by-step, alternating between ReActThought, Action, and Observation steps:\n\n"
-        "ReActThought: You will reason through the current situation, ask yourself questions, describe your current understanding of the situation, and decide on the next action to take. "
-        "Make sure to be specific and concise.\n\n"
+        "Thought: You will reason through the current situation, ask yourself questions, describe your current understanding of the situation, and decide on the next action to take. "
         "Observation: The current observation.\n\n"
         "Action: You will decide to take one of the following actions:\n"
         "- reason: Continue reasoning about the current situation.\n"
         "- act: Perform an action using one of the tools in your toolkit (be specific about the action you wish to take).\n"
         "- finish: Move on to the next question, or finish the task if no more questions remain.\n\n"
+        "Note: You have a limited number of steps you can take. You have taken {step_count} of {max_steps} steps. Once all steps have been run you will fail the task."
     )
 
     ACTIONS: str = "Here is the list of actions you can take:\n{}"
@@ -75,8 +79,12 @@ class ReactAgent(BaseAgent[E]):
         super().__init__(llm=llm, tools=tools, memory=memory, verbose=verbose, logger=logger)
         self.parallel_tool_calls = parallel_tool_calls
 
+        self.max_steps = DEFAULT_MAX_STEPS
+        self.step_count = 0
+
+        self.thought: ReActThought | None = None
         self.finish_condition_callback = finish_condition_callback
-        self.thoughts = []
+        self.has_initialized = False
 
     async def initialize(self, messages: list[ChatCompletionMessageParam] = []) -> Optional[ReActThought]:
         """
@@ -91,21 +99,23 @@ class ReactAgent(BaseAgent[E]):
         self.logger.info("Initializing ReactAgent.")
 
         try:
-            # Inject the default react agent messages with the config messages.
-            # TODO: Add function to BaseMemory to insert memory items into the top of the list. This way users can modify memory however they wish before initializing the agent.
-            default_messages = [
-                {"role": "system", "content": self.BASE_REACT_PROMPT},
-                {"role": "system", "content": self.ACTIONS.format("\n".join([f"- {tool.__name__}" for tool in self.tools]))},
-                *messages,
-            ]
-            for message in default_messages:
-                self.memory.add(message)
+            if not self.has_initialized:
+                # Inject the default react agent messages with the config messages.
+                # TODO: Add function to BaseMemory to insert memory items into the top of the list. This way users can modify memory however they wish before initializing the agent.
+                default_messages = [
+                    {"role": "system", "content": self.BASE_REACT_PROMPT.format(step_count=self.step_count, max_steps=self.max_steps)},
+                    {"role": "system", "content": self.ACTIONS.format("\n".join([f"- {tool.__name__}" for tool in self.tools]))},
+                    *messages,
+                ]
+                for message in default_messages:
+                    self.memory.add(message)
+                self.has_initialized = True
 
             await self.emit("initialize", self)
-            initial_thought = await self.llm.structured_completion(response_format=ReActThought, messages=self.memory.get())
-            if initial_thought:
+            initial_response = await self.llm.structured_completion(response_format=ReActThought, messages=self.memory.get())
+            if initial_response:
                 self.logger.info("Received initial thought from structured completion.")
-                return initial_thought.parsed
+                return initial_response.parsed
             else:
                 self.logger.warning("No initial thought received during initialization.")
                 return None
@@ -125,20 +135,22 @@ class ReactAgent(BaseAgent[E]):
         Returns:
             Optional[ReActThought]: The next ReActThought object or None to terminate the loop.
         """
+        self.memory.update(0, {"role": "system", "content": self.BASE_REACT_PROMPT.format(step_count=self.step_count, max_steps=self.max_steps)})
+
         if thought is None:
             self.logger.warning("The agent returned an invalid thought.")
             return None
 
         try:
+            # Emit the step event before adding the message to memory.
+            await self.emit("step", self)
+
             thought_message = f"\nAction: {thought.action}\nThought: {thought.thought}\n"
             if thought.observations:
                 thought_message += f"\nObservation: {thought.observations}"
 
             self.add_message({"role": "assistant", "content": thought_message, "name": "lumis"})
             self.logger.debug(f"Added assistant message: {thought_message}")
-
-            # Emit the step with the agent and the thought
-            await self.emit("step", self, thought)
 
             if thought.action == "act":
                 self.logger.info("Performing action: act")
@@ -161,6 +173,8 @@ class ReactAgent(BaseAgent[E]):
                 else:
                     self.logger.warning("The finish condition callback returned False. The agent will continue to run.")
 
+            await self.emit("after_step", self)
+
             # Obtain the next thought from structured completion
             self.logger.debug("Requesting new thought from structured completion.")
             chat_message = await self.llm.structured_completion(response_format=ReActThought, messages=self.memory.get())
@@ -171,7 +185,6 @@ class ReactAgent(BaseAgent[E]):
                 self.logger.warning("No new thought received.")
                 new_thought = None
 
-            await self.emit("after_step", self)
             return new_thought
 
         except Exception as e:
@@ -180,8 +193,8 @@ class ReactAgent(BaseAgent[E]):
             await self.emit("error", self)
             return None
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=0.5, max=3), reraise=True)
-    async def run(self, messages: list[ChatCompletionMessageParam] = [], max_steps: int = 100, *args, **kwargs) -> Optional[Any]:
+    @retry(stop=stop_after_attempt(5), reraise=True)
+    async def run(self, messages: list[ChatCompletionMessageParam] = [], max_steps: int = DEFAULT_MAX_STEPS) -> Optional[Any]:
         """
         Runs the agent's reasoning loop to process tasks.
 
@@ -193,17 +206,23 @@ class ReactAgent(BaseAgent[E]):
             Optional[Any]: The final result of the agent's reasoning process or None if terminated early.
         """
         self.logger.info("Agent run started.")
+        self.max_steps = max_steps
         try:
-            thought = await self.initialize(messages=messages, **kwargs)
-            step_count = 0
+            self.thought = await self.initialize(messages=messages)
+            self.step_count = 0
 
-            while thought and step_count < max_steps:
-                self.logger.debug(f"Step {step_count + 1}: {thought}")
-                thought = await self.step(thought)
-                step_count += 1
-                self.logger.debug(f"Completed step {step_count}.")
+            while self.thought and self.step_count < max_steps:
+                self.logger.debug(f"Step {self.step_count + 1}: {self.thought}")
+                self.thought = await self.step(self.thought)
 
-            if step_count >= max_steps:
+                if self.step_count == max_steps // 2:
+                    self.add_message({"role": "system", "content": "You are halfway before you will be forced to finish your task."})
+
+                self.step_count += 1
+                self.logger.debug(f"Completed step {self.step_count}.")
+
+            if self.step_count >= max_steps:
+                await self.emit("max_steps_reached", self)
                 self.logger.warning(f"Maximum steps reached ({max_steps}). Terminating the run.")
             else:
                 self.logger.info("Agent run completed successfully.")
@@ -240,5 +259,7 @@ class ReactAgent(BaseAgent[E]):
             return None
 
     async def _reset(self):
-        # TODO: Reset the agent
+        self.thought = None
+        self.steps_count = 0
+        self.has_initialized = None
         await self.emit("reset", self)

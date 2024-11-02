@@ -2,8 +2,8 @@ import asyncio
 import logging
 from typing import Optional
 
-from lumis.agents.npl import LanguageProcessor
-from lumis.base.common.logger_mixin import LoggerMixin
+from lumis.common import LoggerMixin
+from lumis.npl import LanguageProcessor
 
 from pydantic import BaseModel, Field
 import wikipedia

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from inspect import iscoroutinefunction
 import json
 import logging
-from typing import Any, Callable, Coroutine, Literal, Optional, Protocol, TypeVar, Union
+from typing import Any, Callable, Coroutine, Literal, Optional, TypeVar, Union
 
 from lumis.common.event_emitter import EventEmitter
 from lumis.common.logger_mixin import LoggerMixin
@@ -15,16 +15,16 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from openai import NOT_GIVEN, NotGiven
 from openai._types import Body, Headers, Query
 from openai.types import ChatModel
-from openai.types.chat import ChatCompletionAssistantMessageParam, ChatCompletionMessageParam, ChatCompletionToolChoiceOptionParam, ChatCompletionToolParam
+from openai.types.chat import ChatCompletionAssistantMessageParam, ChatCompletionMessageParam, ChatCompletionToolParam
 
 E = TypeVar("E", bound=str)
 EventHandler = Union[Callable[..., Any], Callable[..., Coroutine[Any, Any, Any]]]
 
 
-class Evaluation(Protocol):
-    @abstractmethod
-    async def evaluate(self, agent: "BaseAgent", *args: Any, **kwargs: Any) -> None:
-        pass
+# class Evaluation(Protocol):
+#     @abstractmethod
+#     async def evaluate(self, agent: "BaseAgent", *args: Any, **kwargs: Any) -> None:
+#         pass
 
 
 class BaseAgent(EventEmitter[E], LoggerMixin, ABC):
@@ -34,7 +34,7 @@ class BaseAgent(EventEmitter[E], LoggerMixin, ABC):
         memory: BaseMemory = SimpleMemory(),
         tools: list[Callable] = [],
         # Note: should we just use the events instead?
-        evaluator: Optional[Evaluation] = None,
+        # evaluator: Optional[Evaluation] = None,
         verbose: bool = False,
         logger: Optional[logging.Logger] = None,
         *args: Any,
@@ -48,7 +48,7 @@ class BaseAgent(EventEmitter[E], LoggerMixin, ABC):
 
         self.llm = llm
 
-        self.evaluator = evaluator
+        # self.evaluator = evaluator
 
         self._agent_id = get_random_string(5)
         self.__tools = tools
@@ -126,7 +126,6 @@ class BaseAgent(EventEmitter[E], LoggerMixin, ABC):
         stop: str | list[str] | NotGiven | None = NOT_GIVEN,
         store: bool | NotGiven | None = NOT_GIVEN,
         temperature: float | NotGiven | None = NOT_GIVEN,
-        tool_choice: ChatCompletionToolChoiceOptionParam | NotGiven = NOT_GIVEN,
         top_logprobs: int | NotGiven | None = NOT_GIVEN,
         top_p: float | NotGiven | None = NOT_GIVEN,
         user: str | NotGiven = NOT_GIVEN,
@@ -165,7 +164,7 @@ class BaseAgent(EventEmitter[E], LoggerMixin, ABC):
                 stop=stop,
                 store=store,
                 temperature=temperature,
-                tool_choice=tool_choice,
+                tool_choice="required",
                 tools=self.tool_definitions,
                 top_logprobs=top_logprobs,
                 top_p=top_p,
@@ -176,7 +175,7 @@ class BaseAgent(EventEmitter[E], LoggerMixin, ABC):
                 timeout=timeout,
             )
             if tool_call_message and hasattr(tool_call_message, "tool_calls") and tool_call_message.tool_calls:
-                self.logger.debug("Received tool call message")
+                self.logger.debug(f"Received tool call message: {tool_call_message.model_dump()}")
                 message = ChatCompletionAssistantMessageParam(**tool_call_message.model_dump())
 
                 self.memory.add(message)
@@ -204,6 +203,8 @@ class BaseAgent(EventEmitter[E], LoggerMixin, ABC):
                         except Exception as e:
                             self.log_exception(e, level=logging.ERROR)
                             tool_result_content = f"An error occurred while calling {function_name}"
+
+                        self.logger.info(f"Tool Call complete with response: {str(tool_result_content)}")
                         self.memory.add(
                             {
                                 "role": "tool",
@@ -213,13 +214,13 @@ class BaseAgent(EventEmitter[E], LoggerMixin, ABC):
                         )
 
             else:
-                self.add_message({"role": "system", "content": "An issue occurred while calling the tool, please try again."})
+                # self.add_message({"role": "system", "content": "An issue occurred while calling the tool, please try again."})
                 self.logger.warning("No tool call message received")
         except Exception as e:
             self.log_exception(e, level=logging.ERROR)
 
     def add_message(self, message: ChatCompletionMessageParam):
-        self.logger.debug(f"Adding message to memory: {message}")
+        self.logger.debug(f"Adding message to memory: {message}, memory contains {self.memory.length} messages.")
         self.memory.add(message)
         if self.verbose:
             role = message.get("role", None)

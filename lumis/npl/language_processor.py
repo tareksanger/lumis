@@ -1,6 +1,6 @@
 from typing import Optional, Tuple
 
-from lumis.base.common.logger_mixin import LoggerMixin
+from lumis.common.logger_mixin import LoggerMixin
 
 from ..model_manager import ModelManager
 
@@ -185,11 +185,3 @@ class LanguageProcessor(LoggerMixin):
         processed = ner(doc)
         entities: list[Tuple[str, str]] = [(ent.text, ent.label_) for ent in processed.ents]
         return entities
-
-    def sentiment(self, text: str):
-        llm = self.nlp.add_pipe("llm_textcat")
-        llm.add_label("INSULT")
-        llm.add_label("COMPLIMENT")
-
-        doc = self.nlp(text)
-        return doc.cats

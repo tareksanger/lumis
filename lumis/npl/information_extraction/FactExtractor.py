@@ -7,6 +7,7 @@ from spacy.matcher import Matcher
 from spacy.tokens import Doc, Span, Token
 
 
+# TODO: Convert this to a spacy factory
 class FactExtractor:
     def __init__(self, model: SpacyModels = "en_core_web_lg") -> None:
         """
