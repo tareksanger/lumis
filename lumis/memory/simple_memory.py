@@ -1,3 +1,5 @@
+from typing import Optional
+
 from .base_memory import BaseMemory
 
 from openai.types.chat import ChatCompletionMessageParam
@@ -31,6 +33,9 @@ class SimpleMemory(BaseMemory):
 
     def update(self, index: int, message: ChatCompletionMessageParam):
         self.__messages[index] = message
+
+    def insert(self, index: int, message: ChatCompletionMessageParam):
+        pass
 
     @property
     def length(self) -> int:
