@@ -1,5 +1,3 @@
-from typing import Optional
-
 from .base_memory import BaseMemory
 
 from openai.types.chat import ChatCompletionMessageParam
