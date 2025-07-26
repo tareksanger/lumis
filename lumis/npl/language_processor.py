@@ -2,17 +2,16 @@ from typing import Optional, Tuple
 
 from lumis.common.logger_mixin import LoggerMixin
 
-from ..model_manager import ModelManager
-
+import spacy
 from spacy.tokens import Span
 
 
 class LanguageProcessor(LoggerMixin):
     """
-    A class for handling NLP-related tasks using pre-loaded models from ModelManager.
+    A class for handling NLP-related tasks using spaCy models.
     """
 
-    def __init__(self):
+    def __init__(self, model_name: str = "en_core_web_lg"):
         """
         Initializes the NLP processor with the specified SpaCy model.
 
@@ -21,10 +20,9 @@ class LanguageProcessor(LoggerMixin):
         """
         super().__init__()
 
-        self.model_manager = ModelManager.get_instance()
-
-        self.nlp = self.model_manager.get_spacy_model("en_core_web_lg")
-        # self.nlp_trf = self.model_manager.get_spacy_model("en_core_web_trf")
+        # spaCy handles caching and singleton behavior automatically
+        self.nlp = spacy.load(model_name)
+        # self.nlp_trf = spacy.load("en_core_web_trf")
         # if not self.nlp_trf.has_pipe("experimental_coref"):
         #     self.nlp_trf.add_pipe("experimental_coref")
 

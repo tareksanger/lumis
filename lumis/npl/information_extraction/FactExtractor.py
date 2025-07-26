@@ -1,7 +1,6 @@
 from typing import Optional, Set, Tuple
 
-from ...model_manager import ModelManager, SpacyModels
-
+import spacy
 from spacy.language import Language
 from spacy.matcher import Matcher
 from spacy.tokens import Doc, Span, Token
@@ -9,13 +8,13 @@ from spacy.tokens import Doc, Span, Token
 
 # TODO: Convert this to a spacy factory
 class FactExtractor:
-    def __init__(self, model: SpacyModels = "en_core_web_lg") -> None:
+    def __init__(self, model: str = "en_core_web_lg") -> None:
         """
         Initialize the FactExtractor with a spaCy NLP pipeline.
         :param model: The name of the spaCy model to load.
         """
-        self.model_manager = ModelManager.get_instance()
-        self.nlp: Language = self.model_manager.get_spacy_model(model)
+        # spaCy handles caching and singleton behavior automatically
+        self.nlp: Language = spacy.load(model)
         self.matcher: Matcher = Matcher(self.nlp.vocab)
         self._init_patterns()
 
