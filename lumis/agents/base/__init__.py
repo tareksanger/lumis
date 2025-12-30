@@ -1,4 +1,6 @@
-from .base_agent import BaseAgent, Evaluation
-from .base_react_agent import BaseReactAgent
+from __future__ import annotations
 
-__all__ = ["BaseReactAgent", "Thought", "BaseAgent", "Evaluation"]
+from .base_agent import BaseAgent
+from .graph_based_agent import GraphBasedAgent
+
+__all__ = ["BaseAgent", "GraphBasedAgent"]

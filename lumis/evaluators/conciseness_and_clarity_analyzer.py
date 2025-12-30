@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import re
 from typing import Dict
 import zlib
 
 from nltk import pos_tag
 from nltk.tokenize import word_tokenize
+import textstat
 
 
 class TextConcisenessAnalyzer:
@@ -133,54 +136,51 @@ class TextConcisenessAnalyzer:
         density = len(content_words) / len(words)
         return density
 
-    # @classmethod
-    # def paraphrase_and_compare(cls, text: str) -> Dict[str, Any]:
-    #     """
-    #     Paraphrase the text and compare the lengths to assess conciseness.
+    @classmethod
+    def composite_readability_score(cls, text: str, alpha: float = 10.0) -> float:
+        """
+        Calculate a composite readability score for a given text.
 
-    #     How to use:
-    #         Call this method with the text you want to analyze.
-    #         Note: Requires the transformers library and internet connection to load the model.
+        The composite score is defined as:
+            Composite Score = Flesch Reading Ease - (alpha * Flesch-Kincaid Grade Level)
 
-    #     When to use:
-    #         Use this method to see how a language model would rephrase your text.
-    #         A significant reduction in length may indicate verbosity in the original text.
+        Parameters:
+        - text (str): The text to evaluate.
+        - alpha (float): The weighting factor for the grade level penalty (default: 10.0).
 
-    #     What the scores mean:
-    #         - 'original_length': Word count of the original text.
-    #         - 'paraphrased_length': Word count of the paraphrased text.
-    #         - 'length_difference': Difference in word counts; a positive value indicates reduction.
+        Returns:
+        - float: The composite readability score. Higher scores indicate better clarity.
+        """
 
-    #     Args:
-    #         text (str): The input text string to analyze.
+        # Compute the readability metrics
+        reading_ease = textstat.flesch_reading_ease(text)  # type: ignore
+        grade_level = textstat.flesch_kincaid_grade(text)  # type: ignore
 
-    #     Returns:
-    #         Dict[str, Any]: A dictionary containing:
-    #             - 'original_text' (str)
-    #             - 'paraphrased_text' (str)
-    #             - 'original_length' (int)
-    #             - 'paraphrased_length' (int)
-    #             - 'length_difference' (int)
-    #     """
-    #     try:
-    #         from transformers import pipeline
-    #     except ImportError:
-    #         raise ImportError("Please install the 'transformers' library to use this method.")
+        # Calculate the composite score
+        score = reading_ease - (alpha * grade_level)
 
-    #     # Load the model (this may take time and require internet)
-    #     paraphraser = pipeline("text2text-generation", model="t5-base", tokenizer="t5-base")
+        return score
 
-    #     # Prepare the input for paraphrasing
-    #     paraphrased = paraphraser("paraphrase: " + text, max_length=512, do_sample=False)
-    #     if not isinstance(paraphrased, list):
-    #         raise ValueError("Paraphrased output is not a list")
-    #     if not paraphrased:
-    #         raise ValueError("Paraphrased output is empty")
+    @classmethod
+    def is_too_verbose(cls, text: str, max_avg_sentence_length: float = 50.0, max_clauses: int = 5) -> bool:
+        """
+        Determines if a prompt is likely too verbose for an agent to process effectively.
+        """
+        metrics = cls.measure_lengths(text)
+        num_clauses = len(re.split(r"\band\b|\bor\b|,|;", text))  # crude clause count
 
-    #     paraphrased_text = paraphrased[0]["generated_text"]
+        return metrics["average_sentence_length"] > max_avg_sentence_length or num_clauses > max_clauses
 
-    #     original_length = len(text.split())
-    #     paraphrased_length = len(paraphrased_text.split())
-    #     length_difference = original_length - paraphrased_length
+    @classmethod
+    def tokenize_sentence(cls, sentence: str) -> set[str]:
+        """Lowercase, remove punctuation, and split into a set of words."""
+        return set(re.findall(r"\b\w+\b", sentence.lower()))
 
-    #     return {"original_text": text, "paraphrased_text": paraphrased_text, "original_length": original_length, "paraphrased_length": paraphrased_length, "length_difference": length_difference}
+    @classmethod
+    def jaccard(cls, a: str, b: str) -> float:
+        """Compute Jaccard similarity between two sentences as sets of words."""
+        set_a = cls.tokenize_sentence(a)
+        set_b = cls.tokenize_sentence(b)
+        intersection: int = len(set_a & set_b)
+        union: int = len(set_a | set_b)
+        return intersection / union if union else 0.0

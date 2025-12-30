@@ -1,184 +1,186 @@
+from __future__ import annotations
+
+"""
+Wikipedia search operations with integrated logging and caching.
+
+This module provides asynchronous methods for searching, retrieving pages,
+and other Wikipedia API operations with built-in caching and rate limiting.
+"""
+
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
+from decimal import Decimal
+import functools
 import logging
-from typing import Optional
+from typing import Any, Callable, List, Optional, Tuple, Union
 
-from lumis.common import LoggerMixin
-from lumis.npl import LanguageProcessor
-
-from pydantic import BaseModel, Field
+from lumis.core.common.logger_mixin import LoggerMixin
 import wikipedia
+from wikipedia.exceptions import DisambiguationError, PageError
 
-
-class WikiResult(BaseModel):
-    page_id: str
-    title: str
-    summary: str
-    content: str
-    url: str
-
-
-class ReleventWikiResult(WikiResult):
-    similarity: float = Field(default=0)
+WikiPage = wikipedia.WikipediaPage
 
 
 class WikipediaSearcher(LoggerMixin):
     """
     A class to handle Wikipedia search operations using the 'wikipedia' package with integrated logging.
+    Provides asynchronous methods for searching, retrieving pages, and other Wikipedia API operations.
     """
 
-    def __init__(self, user_agent: Optional[str] = "lumis/1.0 (https://lumis.com):tech@lumis.com", logger: Optional[logging.Logger] = None):
-        """
-        Initializes the WikipediaSearcher.
-
-        Args:
-            language_processor (LanguageProcessor): An instance of LanguageProcessor for NLP tasks.
-            logger (Optional[logging.Logger]): An existing logger to use. If None, a new logger is created.
-        """
+    def __init__(
+        self,
+        user_agent: str = "",
+        logger: Optional[logging.Logger] = None,
+        rate_limit: bool = True,
+        rate_limit_wait_ms: int = 50,
+        max_workers: Optional[int] = None,
+    ):
+        """Initialize the WikipediaSearcher with custom settings."""
         super().__init__(logger=logger)
-        self.language_processor = LanguageProcessor()
-        self.logger.info("WikipediaSearcher initialized.")
+        self.logger.debug("WikipediaSearcher initialized.")
 
-        # Set a default User-Agent without contact information (not recommended)
         self.user_agent = user_agent
         wikipedia.set_user_agent(self.user_agent)
         self.logger.debug(f"User-Agent set to: {self.user_agent}")
 
-    async def search(self, query: str, num_results: int = 5, lang: str = "en") -> list[WikiResult]:
+        wikipedia.set_rate_limiting(rate_limit, timedelta(milliseconds=rate_limit_wait_ms))
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+
+    def __del__(self):
+        """Cleanup resources."""
+        if self._executor:
+            self._executor.shutdown(wait=False)
+
+    async def _async_executor(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        """Execute a synchronous function asynchronously in the thread pool."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, functools.partial(func, **kwargs), *args)
+
+    @functools.lru_cache(maxsize=1000, typed=True)
+    def _get_page_sync(self, title: str, lang: str = "en") -> Optional[WikiPage]:
         """
-        Searches Wikipedia for the given query and retrieves page details.
+        Synchronous method to get a Wikipedia page with caching.
 
-        Args:
-            query (str): The search query.
-            num_results (int, optional): Number of search results to return. Defaults to 5.
-            lang (str, optional): Language code for Wikipedia. Defaults to "en".
-
-        Returns:
-            List[Dict[str, Any]]: A list of search results, each containing 'title', 'url', and 'summary'.
+        The lru_cache decorator will cache up to 1000 most recently used pages.
+        Different language versions of the same title are cached separately due to typed=True.
         """
-        wikipedia.set_lang(lang)
-        self.logger.info(f"Initiating Wikipedia search for query: '{query}' in language '{lang}'")
-
         try:
-            loop = asyncio.get_event_loop()
-            search_results = await loop.run_in_executor(None, wikipedia.search, query, num_results)
-
-            self.logger.debug(f"Retrieved {len(search_results)} search results from Wikipedia for query: '{query}'")
-
-            if not search_results:
-                self.logger.warning(f"No search results found on Wikipedia for query: '{query}'")
-                return []
-
-            results: list[WikiResult] = []
-            for idx, title in enumerate(search_results, start=1):
-                try:
-                    page = await loop.run_in_executor(None, wikipedia.page, title)
-                    content = page.content.strip()
-                    summary = page.summary.strip()
-                    url = page.url
-                    page_id = page.pageid
-
-                    result = WikiResult(page_id=page_id, title=title, url=url, summary=summary, content=content)
-
-                    results.append(result)
-                    self.logger.info(f"Result {idx}: '{title}' retrieved successfully.")
-                except wikipedia.DisambiguationError as e:
-                    self.logger.warning(f"DisambiguationError for title '{title}': {e.options}. Skipping.")
-                except wikipedia.PageError:
-                    self.logger.warning(f"PageError: The page '{title}' does not exist. Skipping.")
-                except Exception as e:
-                    self.log_exception(e)
-
-            self.logger.info(f"Total results retrieved: {len(results)}")
-            return results
-
+            wikipedia.set_lang(lang)
+            return wikipedia.page(title)
+        except DisambiguationError as e:
+            self.logger.warning(f"DisambiguationError for title '{title}': {e.options}")
+        except PageError:
+            self.logger.warning(f"PageError: The page '{title}' does not exist")
         except Exception as e:
             self.log_exception(e)
-            return []
-
-    async def get_page_details(self, title: str, lang: str = "en") -> Optional[WikiResult]:
-        """
-        Retrieves detailed information about a specific Wikipedia page.
-
-        Args:
-            title (str): The title of the Wikipedia page.
-            lang (str, optional): Language code for Wikipedia. Defaults to "en".
-
-        Returns:
-            Optional[Dict[str, Any]]: A dictionary containing 'title', 'url', and 'summary' if the page exists; otherwise, None.
-        """
-        wikipedia.set_lang(lang)
-        self.logger.info(f"Retrieving details for Wikipedia page: '{title}' in language '{lang}'")
-
-        try:
-            loop = asyncio.get_event_loop()
-            page = await loop.run_in_executor(None, wikipedia.page, title)
-            content = page.content.strip()
-            summary = page.summary.strip()
-            url = page.url
-            page_id = page.pageid
-
-            result = WikiResult(page_id=page_id, title=title, url=url, summary=summary, content=content)
-
-            self.logger.info(f"Wikipedia page '{title}' retrieved successfully.")
-            return result
-
-        except wikipedia.DisambiguationError as e:
-            self.logger.warning(f"DisambiguationError for title '{title}': {e.options}.")
-        except wikipedia.PageError:
-            self.logger.warning(f"PageError: The page '{title}' does not exist.")
-        except Exception as e:
-            self.log_exception(e)
-
         return None
 
-    async def search_and_get_relevant(self, query: str, num_results: int = 5, threshold: float = 0.8, lang: str = "en") -> list[ReleventWikiResult]:
-        """
-        Searches Wikipedia and returns the most relevant results based on similarity scores.
+    async def _get_page(self, title: str, lang: str = "en") -> Optional[WikiPage]:
+        """Get a page from cache or API with error handling."""
+        return await self._async_executor(self._get_page_sync, title, lang=lang)
 
-        Args:
-            query (str): The search query.
-            num_results (int, optional): Number of top relevant results to return. Defaults to 5.
-            threshold (float, optional): Similarity threshold to determine relevance. Defaults to 0.8.
-            lang (str, optional): Language code for Wikipedia. Defaults to "en".
-
-        Returns:
-            List[Dict[str, Any]]: A list of the most relevant search results, each containing 'title', 'url', 'summary', and 'similarity'.
-        """
-        self.logger.info(f"Starting search and relevance extraction for query: '{query}'")
+    async def search(self, query: str, num_results: int = 5, lang: str = "en") -> List[WikiPage]:
+        """Search Wikipedia and retrieve page details concurrently."""
+        wikipedia.set_lang(lang)
+        self.logger.debug(f"Searching for: '{query}' in {lang}")
 
         try:
-            search_results = await self.search(query, num_results=num_results * 2, lang=lang)
-
+            search_results = await self._async_executor(wikipedia.search, query, num_results)
             if not search_results:
-                self.logger.warning(f"No search results to process for query: '{query}'")
+                self.logger.warning(f"No results found for: {query}")
                 return []
 
-            relevant_results = []
-
-            for idx, result in enumerate(search_results, start=1):
-                title = result.title
-                summary = result.summary
-                combined_text = f"{title}. {summary}"
-
-                # Compute similarity using the LanguageProcessor
-                similarity = self.language_processor.similarity(query, combined_text)
-                self.logger.debug(f"Result {idx}: '{title}' has similarity {similarity:.2f}")
-
-                if similarity >= threshold:
-                    relevant_result = ReleventWikiResult(**result.model_dump(), similarity=similarity)
-                    relevant_results.append(relevant_result)
-                    self.logger.info(f"Result {idx} ('{title}') deemed relevant with similarity {similarity:.2f}")
-
-                    if len(relevant_results) >= num_results:
-                        self.logger.debug(f"Desired number of relevant results ({num_results}) achieved.")
-                        break
-
-            if not relevant_results:
-                self.logger.warning(f"No relevant Wikipedia results met the threshold of {threshold} for query: '{query}'")
-
-            self.logger.info(f"Total relevant results found: {len(relevant_results)}")
-            return relevant_results
-
+            tasks = [self._get_page(title, lang) for title in search_results]
+            results = await asyncio.gather(*tasks)
+            return [r for r in results if r is not None]
         except Exception as e:
             self.log_exception(e)
             return []
+
+    async def get_page_details(self, title: str, lang: str = "en") -> Optional[WikiPage]:
+        """Get detailed information about a specific Wikipedia page."""
+        return await self._get_page(title, lang)
+
+    async def get_random_pages(self, num_pages: int = 1, lang: str = "en") -> List[WikiPage]:
+        """Get random Wikipedia pages."""
+        wikipedia.set_lang(lang)
+        self.logger.debug(f"Fetching {num_pages} random pages")
+
+        try:
+            titles = await self._async_executor(wikipedia.random, num_pages)
+            titles = [titles] if isinstance(titles, str) else titles
+            tasks = [self._get_page(title, lang) for title in titles]
+            results = await asyncio.gather(*tasks)
+            return [r for r in results if r is not None]
+        except Exception as e:
+            self.log_exception(e)
+            return []
+
+    async def get_suggestion(self, query: str, lang: str = "en") -> Optional[str]:
+        """Get a search suggestion for the query."""
+        wikipedia.set_lang(lang)
+        try:
+            return await self._async_executor(wikipedia.suggest, query)
+        except Exception as e:
+            self.log_exception(e)
+            return None
+
+    async def geosearch(
+        self,
+        latitude: Union[float, Decimal],
+        longitude: Union[float, Decimal],
+        title: Optional[str] = None,
+        radius: int = 1000,
+        num_results: int = 10,
+        lang: str = "en",
+    ) -> List[WikiPage]:
+        """Search for Wikipedia pages near specified coordinates."""
+        wikipedia.set_lang(lang)
+        self.logger.debug(f"Geosearch at ({latitude}, {longitude}), radius: {radius}m")
+
+        try:
+            titles = await self._async_executor(wikipedia.geosearch, latitude=latitude, longitude=longitude, title=title, results=num_results, radius=radius)
+            if not titles:
+                return []
+
+            tasks = [self._get_page(title, lang) for title in titles]
+            results = await asyncio.gather(*tasks)
+            return [r for r in results if r is not None]
+        except Exception as e:
+            self.log_exception(e)
+            return []
+
+    async def search_with_suggestion(self, query: str, num_results: int = 5, lang: str = "en") -> Tuple[List[WikiPage], Optional[str]]:
+        """Search with query suggestions."""
+        wikipedia.set_lang(lang)
+        self.logger.debug(f"Search with suggestion: '{query}'")
+
+        try:
+            results, suggestion = await self._async_executor(lambda: wikipedia.search(query, results=num_results, suggestion=True))
+            if not results:
+                return [], suggestion
+
+            tasks = [self._get_page(title, lang) for title in results]
+            pages = await asyncio.gather(*tasks)
+            return [p for p in pages if p is not None], suggestion
+        except Exception as e:
+            self.log_exception(e)
+            return [], None
+
+    @functools.lru_cache(maxsize=1000, typed=True)
+    def _get_summary_sync(self, title: str, sentences: int = 0, chars: int = 0, auto_suggest: bool = True, lang: str = "en") -> Optional[str]:
+        """Synchronous method to get a page summary with caching."""
+        try:
+            wikipedia.set_lang(lang)
+            return wikipedia.summary(title, sentences=sentences, chars=chars, auto_suggest=auto_suggest)
+        except (PageError, DisambiguationError) as e:
+            self.logger.warning(f"Error getting summary for '{title}': {str(e)}")
+            return None
+        except Exception as e:
+            self.log_exception(e)
+            return None
+
+    async def get_summary(self, title: str, sentences: int = 0, chars: int = 0, auto_suggest: bool = True, lang: str = "en") -> Optional[str]:
+        """Get a plain text summary of a Wikipedia page."""
+        return await self._async_executor(self._get_summary_sync, title, sentences=sentences, chars=chars, auto_suggest=auto_suggest, lang=lang)
