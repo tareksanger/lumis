@@ -1,10 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 from typing import Sequence, Tuple, Union
 
-from lumis.base.types.assumptions.test_spec import TimeFrame
-
 from dateutil.parser import parse
-
 
 def seconds_to_readable(seconds: int) -> str:
     """
@@ -38,27 +35,6 @@ def seconds_to_readable(seconds: int) -> str:
                 strings.append(f"{period_value} {period_name}s")
 
     return ", ".join(strings)
-
-
-def timeframe_to_string(timeframe: TimeFrame) -> str:
-    unit_names = {"h": "hour", "d": "day", "w": "week"}
-    units_order = ["w", "d", "h"]  # Order units from largest to smallest
-    parts = []
-    for unit in units_order:
-        value = timeframe.get(unit)
-        if value:
-            unit_name = unit_names[unit]
-            if value != 1:
-                unit_name += "s"
-            parts.append(f"{value} {unit_name}")
-    return " ".join(parts)
-
-
-def add_timeframe_to_datetime(dt: datetime, timeframe: TimeFrame) -> datetime:
-    arg_map = {"h": "hours", "d": "days", "w": "weeks"}
-    delta_args = {arg_map[key]: value for key, value in timeframe.items() if key in arg_map}
-    delta = timedelta(**delta_args)  # type: ignore
-    return dt + delta
 
 
 DateObject = Union[str, datetime, date]

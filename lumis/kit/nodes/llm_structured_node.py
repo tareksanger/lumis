@@ -10,7 +10,7 @@ from lumis.core.common.logger_mixin import LoggerMixin
 from lumis.llm import OpenAILLM
 from lumis.memory.base_memory import BaseMemory
 from lumis.memory.simple_memory import SimpleMemory
-from lumis.utils.types import BaseSchema
+from lumis.core.utils.types import BaseSchema
 
 from ..graph import Graph, S
 

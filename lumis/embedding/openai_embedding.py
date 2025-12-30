@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Optional, Union
 
-from lumis.utils.coroutine import run_sync
+from lumis.core.utils.coroutine import run_sync
 
 from .base_embedding import BaseEmbeddingModel, Embedding
 

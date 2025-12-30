@@ -1,11 +1,9 @@
-from __future__ import annotations
-
 import random
 import re
 import string
 
 
-def number_to_words(n: int) -> str:  # noqa: C901
+def number_to_words(n: int) -> str:
     """
     Converts a number to its string representation in English.
 
@@ -86,70 +84,8 @@ def get_random_string(size=6, chars=string.ascii_uppercase + string.digits):
     return result_str
 
 
-def urljoin(*args):
-    """
-    Joins given arguments into an url. Trailing but not leading slashes are stripped for each argument.
-
-    Args:
-        *args: A list of strings to be joined into an url.
-
-    Returns:
-        str: The joined url.
-
-    Example:
-        >>> urljoin("https://example.com", "api", "v1", "user")
-        'https://example.com/api/v1/user'
-    """
-    return "/".join(map(lambda x: str(x).strip("/"), args))
-
-
-def camelize(text: str) -> str:
-    """
-    Convert a string to camel case.
-
-    Args:
-        text (str): The string to convert to camel case.
-
-    Returns:
-        str: The string converted to camel case.
-
-    Example:
-        >>> camelize("hello_world")
-        'helloWorld'
-    """
-    components = text.split("_")
-    result = components[0] + "".join(x.title() for x in components[1:])
-    return result
-
-
-def camel_to_snake(camel_str: str) -> str:
-    """
-    Converts a camel case string to snake case.
-
-    Args:
-        camel_str (str): The camel case string to be converted.
-
-    Returns:
-        str: The snake case string.
-
-    Example:
-        >>> camel_to_snake("camelCaseString")
-        'camel_case_string'
-    """
-    snake_str = re.sub(r"(?<!^)(?=[A-Z])", "_", camel_str).lower()
-    return snake_str
-
-
 def snake_to_title(snake_str: str) -> str:
     # Split the snake_case string by underscores
     words = snake_str.split("_")
     # Capitalize the first letter of each word and join them with a space
     return " ".join(word.capitalize() for word in words)
-
-
-def to_snake_case(text: str) -> str:
-    # Replace spaces and special characters with underscores
-    text = re.sub(r"[^\w\s]", "", text)  # Remove special characters
-    text = text.strip().replace(" ", "_")  # Replace spaces with underscores
-    # Convert to lowercase
-    return text.lower()

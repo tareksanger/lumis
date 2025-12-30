@@ -42,7 +42,6 @@ max-complexity = 5 # Change the number for your threshold
 
 [lint.isort]
 force-single-line = false
-known-first-party = ["lumis"]
 combine-as-imports = true
 force-sort-within-sections = true
 order-by-type = false
