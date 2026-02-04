@@ -1,13 +1,23 @@
-from pathlib import Path
+from __future__ import annotations
 
-from spacy.tokens import Doc
-from spacy_llm.util import assemble
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from spacy.tokens import Doc
 
 relative_path = Path(__file__).parent / "config" / "entity_rel_extraction.cfg"
 
 
 class Ner:
     def __init__(self, config: str = str(relative_path)):
+        try:
+            from spacy_llm.util import assemble
+        except ImportError:
+            raise ImportError(
+                "spacy and spacy-llm are required for Ner. "
+                "Install them with: pip install lumis-ai[spacy]"
+            )
         self.nlp = assemble(config)
 
     def get_entities(self, text: str) -> list[tuple[str, str]]:

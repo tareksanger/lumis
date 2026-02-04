@@ -1,9 +1,6 @@
-from typing import Optional, Set, Tuple
+from __future__ import annotations
 
-import spacy
-from spacy.language import Language
-from spacy.matcher import Matcher
-from spacy.tokens import Doc, Span, Token
+from typing import Optional, Set, Tuple
 
 
 # TODO: Convert this to a spacy factory
@@ -13,9 +10,19 @@ class FactExtractor:
         Initialize the FactExtractor with a spaCy NLP pipeline.
         :param model: The name of the spaCy model to load.
         """
+        try:
+            import spacy
+            from spacy.matcher import Matcher
+            from spacy.tokens import Doc
+        except ImportError:
+            raise ImportError(
+                "spacy is required for FactExtractor. "
+                "Install it with: pip install lumis-ai[spacy]"
+            )
+
         # spaCy handles caching and singleton behavior automatically
-        self.nlp: Language = spacy.load(model)
-        self.matcher: Matcher = Matcher(self.nlp.vocab)
+        self.nlp = spacy.load(model)
+        self.matcher = Matcher(self.nlp.vocab)
         self._init_patterns()
 
         # Register custom extension if not already registered

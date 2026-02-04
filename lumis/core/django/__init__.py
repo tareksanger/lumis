@@ -1,5 +1,8 @@
 from __future__ import annotations
 
-from .models.chat_memory import ChatMemory
+try:
+    from .models.chat_memory import ChatMemory
 
-__all__ = ["ChatMemory"]
+    __all__ = ["ChatMemory"]
+except ImportError:
+    __all__ = []

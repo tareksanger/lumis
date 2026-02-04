@@ -16,10 +16,19 @@ An AI agent framework for building LLM-powered applications with multi-provider 
 ## Installation
 
 ```bash
-pip install lumis
+pip install lumis-ai
 ```
 
-After installing, download the required spaCy language models:
+### Optional extras
+
+Some integrations are opt-in to keep the base install lighter:
+
+| Extra      | What it adds                                  | Install                           |
+|------------|-----------------------------------------------|-----------------------------------|
+| `spacy`    | NER, fact extraction, coreference resolution  | `pip install lumis-ai[spacy]`     |
+| `django`   | Django ORM memory backend                     | `pip install lumis-ai[django]`    |
+
+The `spacy` extra requires language models. After installing, download them:
 
 ```bash
 python -m spacy download en_core_web_lg
