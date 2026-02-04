@@ -1,6 +1,6 @@
 [project]
 name = "lumis-ai"
-version = "0.1.1a3"
+version = "0.1.1a4"
 description = "An AI agent framework for building LLM-powered applications"
 readme = "README.md"
 license = "MIT"
