@@ -8,8 +8,15 @@ from typing import Literal, Optional, Sequence
 
 from googlesearch import search as google_search
 import redis.asyncio as aioredis
-from tavily import TavilyClient, UsageLimitExceededError
 from typing_extensions import TypedDict
+
+try:
+    from tavili import TavilyClient, UsageLimitExceededError
+except ImportError:
+    TavilyClient = None  # type: ignore[assignment,misc]
+
+    class UsageLimitExceededError(Exception):  # type: ignore[no-redef]
+        pass
 
 logger = logging.getLogger(__name__)
 

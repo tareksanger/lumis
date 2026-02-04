@@ -7,8 +7,6 @@ from typing import Any, Optional
 from lumis.llm import Gemini
 from lumis.tools import WikipediaSearcher
 from lumis.tools.search.arxiv import ArxivResult, ArxivSearcher
-
-from arxiv import SortCriterion, SortOrder
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
@@ -173,7 +171,8 @@ async def search_arxiv(  # noqa: C901
     summary_semaphore = asyncio.Semaphore(4)
 
     try:
-        # Convert string sort parameters to enums
+        from arxiv import SortCriterion, SortOrder
+
         sort_criterion = SortCriterion(sort_by)
         sort_order_enum = SortOrder(sort_order)
 
