@@ -22,7 +22,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "arxiv>=0.5.0",
     "asgiref>=3.8.1",
     "beautifulsoup4>=4.12.0",
     "deepmerge>=2.0.0",
@@ -44,7 +43,6 @@ dependencies = [
     "PyPDF2>=3.0.0",
     "pydantic>=2.9.2",
     "python-dateutil>=2.8.0",
-    "pytrends>=5.1.0",
     "pyvis>=0.3.0",
     "readability-lxml>=3.3.0",
     "redis>=5.0.0",
@@ -59,12 +57,16 @@ dependencies = [
     "transformers>=4.0.0",
     "typing-extensions>=4.0.0",
     "wikipedia>=1.4.0",
-    "yfinance>=0.2.0",
 ]
 
 [project.optional-dependencies]
 django = [
     "django>=4.2",
+]
+search = [
+    "arxiv>=0.5.0",
+    "pytrends>=5.1.0",
+    "yfinance>=0.2.0",
 ]
 spacy = [
     "coreferee>=1.3.0",

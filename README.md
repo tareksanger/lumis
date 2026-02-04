@@ -26,6 +26,7 @@ Some integrations are opt-in to keep the base install lighter:
 | Extra      | What it adds                                  | Install                           |
 |------------|-----------------------------------------------|-----------------------------------|
 | `spacy`    | NER, fact extraction, coreference resolution  | `pip install lumis-ai[spacy]`     |
+| `search`   | arXiv, Google Trends, Yahoo Finance           | `pip install lumis-ai[search]`    |
 | `django`   | Django ORM memory backend                     | `pip install lumis-ai[django]`    |
 
 The `spacy` extra requires language models. After installing, download them:

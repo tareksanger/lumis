@@ -278,16 +278,6 @@ class WebScrapper:
             raise e
 
         return None
-
-    # async def from_gotenberg(self, url: str, metadata: Optional[dict]) -> Optional[Document]:
-    #     # Same logic as before, but uses injected gb_client
-    #     try:
-    #         response = await self.gb_client.afrom_url(url)
-    #         return await self.parse_pdf(response.content, metadata)
-    #     except Exception as e:
-    #         logger.debug(f"Gotenberg failed for {url}: {e}")
-    #         return None
-
     def _url_with_protocol(self, url: str):
         if not url.startswith("http://") and not url.startswith("https://"):
             url = "https://" + url

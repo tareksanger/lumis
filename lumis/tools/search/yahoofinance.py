@@ -7,7 +7,6 @@ from typing import Any, cast, Optional
 from asgiref.sync import sync_to_async
 import pandas as pd
 from pydantic import BaseModel, Field
-import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +52,16 @@ class YahooFinance:
     with async codebases.
     """
 
+    def __init__(self):
+        try:
+            import yfinance as yf
+        except ImportError:
+            raise ImportError(
+                "yfinance is required for YahooFinance. "
+                "Install it with: pip install lumis-ai[search]"
+            )
+        self._yf = yf
+
     @sync_to_async
     def get_quote(self, ticker: str) -> QuoteData:
         """
@@ -70,7 +79,7 @@ class YahooFinance:
         """
         try:
             logger.debug(f"Fetching quote data for ticker: {ticker}")
-            t = yf.Ticker(ticker)
+            t = self._yf.Ticker(ticker)
             info = t.info
 
             return QuoteData(
@@ -114,7 +123,7 @@ class YahooFinance:
         """
         try:
             logger.debug(f"Fetching historical data for {ticker} with period={period}, interval={interval}")
-            t = yf.Ticker(ticker)
+            t = self._yf.Ticker(ticker)
             hist = t.history(period=period, interval=interval, start=start, end=end)
 
             return [
@@ -149,8 +158,8 @@ class YahooFinance:
         """
         try:
             logger.debug(f"Searching for tickers matching: {query}")
-            # Using yf.Tickers() as get_tickers_by_search is deprecated
-            tickers = yf.Tickers(query)
+            # Using self._yf.Tickers() as get_tickers_by_search is deprecated
+            tickers = self._yf.Tickers(query)
             return [{"symbol": symbol, "name": ticker.info.get("shortName", symbol)} for symbol, ticker in tickers.tickers.items()]
         except Exception as e:
             logger.error(f"Error searching tickers for {query}: {str(e)}")
@@ -172,7 +181,7 @@ class YahooFinance:
         """
         try:
             logger.debug(f"Fetching recommendations for {ticker}")
-            t = yf.Ticker(ticker)
+            t = self._yf.Ticker(ticker)
             if t.recommendations is None:
                 return []
             df = cast(pd.DataFrame, t.recommendations)
@@ -197,7 +206,7 @@ class YahooFinance:
         """
         try:
             logger.debug(f"Fetching major holders for {ticker}")
-            t = yf.Ticker(ticker)
+            t = self._yf.Ticker(ticker)
             if t.major_holders is None:
                 return {}
             df = cast(pd.DataFrame, t.major_holders)

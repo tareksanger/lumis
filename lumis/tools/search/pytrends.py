@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from asgiref.sync import sync_to_async
-from pytrends.request import TrendReq
 
 
 class PyTrends:
@@ -12,6 +11,13 @@ class PyTrends:
     """
 
     def __init__(self, tz: int = 0, retries: int = 3, backoff: float = 0.1):
+        try:
+            from pytrends.request import TrendReq
+        except ImportError:
+            raise ImportError(
+                "pytrends is required for PyTrends. "
+                "Install it with: pip install lumis-ai[search]"
+            )
         self.pytrends = TrendReq(retries=retries, backoff_factor=backoff, tz=tz)  # type: ignore
 
     @sync_to_async

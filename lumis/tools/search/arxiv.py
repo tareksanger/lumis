@@ -7,11 +7,14 @@ import logging
 from typing import Any, Dict, Optional
 import xml.etree.ElementTree as ET
 
-import arxiv
-from arxiv import Client, SortCriterion, SortOrder
+from typing import TYPE_CHECKING
+
 import httpx
 from lumis.core.document import Document
 import pymupdf
+
+if TYPE_CHECKING:
+    from arxiv import SortCriterion, SortOrder
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +39,16 @@ class ArxivResult:
 
 class ArxivSearcher:
     def __init__(self, max_results: int = 10, max_concurrent_pdfs: int = 5) -> None:
+        try:
+            import arxiv
+        except ImportError:
+            raise ImportError(
+                "arxiv is required for ArxivSearcher. "
+                "Install it with: pip install lumis-ai[search]"
+            )
+        self._arxiv = arxiv
         self.max_results: int = max_results
-        self.client = Client()
+        self.client = arxiv.Client()
         self._http_client = httpx.AsyncClient()
         self._result_cache: dict[str, ArxivResult] = {}  # Cache for results by arxiv_id
         self._pdf_semaphore = asyncio.Semaphore(max_concurrent_pdfs)
@@ -46,8 +57,8 @@ class ArxivSearcher:
         self,
         query: str,
         max_results: Optional[int] = None,
-        sort_by: SortCriterion = SortCriterion.SubmittedDate,
-        sort_order: SortOrder = SortOrder.Descending,
+        sort_by: SortCriterion | None = None,
+        sort_order: SortOrder | None = None,
         id_list: Optional[list[str]] = None,
         read_pdfs: bool = False,
     ) -> list[ArxivResult]:
@@ -65,8 +76,13 @@ class ArxivSearcher:
         Returns:
             list of ArxivResult objects
         """
+        if sort_by is None:
+            sort_by = self._arxiv.SortCriterion.SubmittedDate
+        if sort_order is None:
+            sort_order = self._arxiv.SortOrder.Descending
+
         # Create search object with all available options
-        search = arxiv.Search(query=query, max_results=max_results or self.max_results, sort_by=sort_by, sort_order=sort_order, id_list=id_list or [])
+        search = self._arxiv.Search(query=query, max_results=max_results or self.max_results, sort_by=sort_by, sort_order=sort_order, id_list=id_list or [])
 
         results: list[ArxivResult] = []
         pdf_tasks = []
