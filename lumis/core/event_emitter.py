@@ -2,7 +2,7 @@ from inspect import iscoroutinefunction
 import logging
 from typing import Any, Callable, Coroutine, Generic, TypeVar, Union
 
-from lumis.common.logger_mixin import LoggerMixin
+from lumis.core.common.logger_mixin import LoggerMixin
 
 E = TypeVar("E", bound=str)
 EventHandler = Union[Callable[..., Any], Callable[..., Coroutine[Any, Any, Any]]]
