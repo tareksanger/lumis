@@ -302,7 +302,7 @@ class Graph(Generic[S], EventEmitter[Events], LoggerMixin):
                 from_node=self.prev_node,
                 node=node,
                 to_node=next_node,
-                state_changes=dict(state_changes),
+                state_changes=dict(state_changes), # type: ignore
                 state=after_state,  # type: ignore
             )
 
