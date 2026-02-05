@@ -896,9 +896,7 @@ class OpenAILLM(BaseLLM):
             self.logger.debug(f"generate iteration={iteration} starting; tools_enabled={bool(tools)}")
 
             tool_definitions = omit
-            if tools:
-                tool_map, tool_definitions = self._process_tools(list(tools))
-                print(tool_map, tool_definitions)
+            tool_map, tool_definitions = self._process_tools(list(tools or []))
 
             response = await self.response(
                 input=current_input,

@@ -9,6 +9,7 @@ from lumis.memory.simple_memory import SimpleMemory
 
 from ..graph import Graph, S
 
+
 class LLMChatNode(LoggerMixin):
     def __init__(self, llm: OpenAILLM, system_prompt: Optional[str] = None, verbose: bool = False, *arg, **kwargs):
         LoggerMixin.__init__(self)

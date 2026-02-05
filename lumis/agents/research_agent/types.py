@@ -5,7 +5,6 @@ from typing import Any, Awaitable, Callable, TypeVar, Union
 from urllib.parse import urlparse
 
 from agents import Agent, RunContextWrapper
-
 from pydantic import BaseModel, Field, field_validator
 
 # Type for callback that can be either sync or async

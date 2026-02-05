@@ -13,7 +13,7 @@ from lumis.llm.openai_llm import OpenAILLM
 from openai.types import ChatModel
 
 # For type variables
-E = TypeVar("E", bound=str | None)
+E = TypeVar("E", bound=str)
 
 CHAT_MODEL: ChatModel = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")  # type: ignore
 

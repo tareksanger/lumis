@@ -6,6 +6,7 @@ from typing import cast, Literal, Optional, TypedDict
 from lumis.agents.base import GraphBasedAgent
 from lumis.evaluators.conciseness_and_clarity_analyzer import TextConcisenessAnalyzer
 from lumis.llm import OpenAILLM
+
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, Field
 
@@ -95,7 +96,7 @@ class PromptRefinementState(TypedDict):
     rewrite: Optional[Rewrite]
 
 
-class PromptRefinementPipeline(GraphBasedAgent[PromptRefinementState, None]):
+class PromptRefinementPipeline(GraphBasedAgent[PromptRefinementState, str]):
     def __init__(
         self,
         llm: Optional[OpenAILLM] = None,

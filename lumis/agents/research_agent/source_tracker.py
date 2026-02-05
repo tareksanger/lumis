@@ -1,23 +1,16 @@
 from __future__ import annotations
 
-"""
-Source tracking functionality for the ResearchAgent.
-
-This module provides classes for tracking and managing sources and metadata
-from various tool calls during agent interactions.
-"""
-
 from dataclasses import dataclass, field
 from datetime import datetime
 import logging
 from typing import Any, Awaitable, Callable, Literal, Optional, Union
 
-from agents import Agent, AgentHooks, RunContextWrapper, TContext, Tool
+from lumis.embedding import OpenAIEmbeddingModel
 
 from .source_models import SourceType
 from .types import ResearchAgentResponse
 
-from lumis.embedding import OpenAIEmbeddingModel
+from agents import Agent, AgentHooks, RunContextWrapper, TContext, Tool
 import numpy as np
 from pydantic import ValidationError
 
@@ -132,20 +125,20 @@ class ResearchAgentHooks(AgentHooks[TContext]):
     def __init__(self, on_end_callback: Optional[CallbackT] = None):
         self.on_end_callback = on_end_callback
 
-    async def on_start(self, ctx: RunContextWrapper[TContext], agent: Agent[TContext]) -> None:
+    async def on_start(self, context: RunContextWrapper[TContext], agent: Agent[TContext]) -> None:
         """Called before the agent starts processing a query."""
-        query = str(ctx)
+        query = str(context)
         logger.info(f"Starting new query: {query}")
 
         # Check if context is a ResearchSourceTracker
-        if isinstance(ctx.context, ResearchSourceTracker):
-            ctx.context.clear()
-            ctx.context.query = query
-            ctx.context.timestamp = datetime.now()
+        if isinstance(context.context, ResearchSourceTracker):
+            context.context.clear()
+            context.context.query = query
+            context.context.timestamp = datetime.now()
 
     async def on_end(
         self,
-        ctx: RunContextWrapper[TContext],
+        context: RunContextWrapper[TContext],
         agent: Agent[TContext],
         output: Any,
     ) -> None:
@@ -153,14 +146,14 @@ class ResearchAgentHooks(AgentHooks[TContext]):
         import inspect
 
         # Save insights to the context for later use
-        if isinstance(output, ResearchAgentResponse) and isinstance(ctx.context, ResearchSourceTracker):
-            ctx.context.insights.append(output)
+        if isinstance(output, ResearchAgentResponse) and isinstance(context.context, ResearchSourceTracker):
+            context.context.insights.append(output)
 
         # Call the on_end_callback if it exists
         logger.info(f"On end callback: {self.on_end_callback}")
         if self.on_end_callback is not None:
             logger.info(f"Calling on_end_callback: {self.on_end_callback}")
-            result = self.on_end_callback(ctx, agent, output)
+            result = self.on_end_callback(context, agent, output)
             if inspect.isawaitable(result):
                 await result
 
@@ -314,9 +307,9 @@ class ResearchAgentHooks(AgentHooks[TContext]):
             logger.error(f"Error processing Gemini source: {e}")
             return None
 
-    def _process_source(self, ctx: RunContextWrapper[TContext], item: dict[str, Any], tool_name: str) -> None:  # noqa: C901
+    def _process_source(self, context: RunContextWrapper[TContext], item: dict[str, Any], tool_name: str) -> None:  # noqa: C901
         """Process a source based on its type and add it to the tracker."""
-        if not isinstance(ctx.context, ResearchSourceTracker):
+        if not isinstance(context.context, ResearchSourceTracker):
             return
 
         source: Optional[SourceType] = None
@@ -335,11 +328,11 @@ class ResearchAgentHooks(AgentHooks[TContext]):
             logger.warning(f"Unknown tool name: {tool_name}")
 
         if source:
-            ctx.context.add_source(source)
+            context.context.add_source(source)
 
     async def on_tool_end(  # noqa: C901
         self,
-        ctx: RunContextWrapper[TContext],
+        context: RunContextWrapper[TContext],
         agent: Agent[TContext],
         tool: Tool,
         result: Any,
@@ -352,7 +345,7 @@ class ResearchAgentHooks(AgentHooks[TContext]):
             if isinstance(result, list):
                 for item in result:
                     if isinstance(item, dict):
-                        self._process_source(ctx, item, tool.name)
+                        self._process_source(context, item, tool.name)
             elif isinstance(result, dict):
                 # Handle Gemini response format
                 if "answer" in result and "sources" in result:
@@ -361,15 +354,15 @@ class ResearchAgentHooks(AgentHooks[TContext]):
                         if isinstance(source, dict):
                             # Add the answer to each source for context
                             source["answer"] = result["answer"]
-                            self._process_source(ctx, source, tool.name)
+                            self._process_source(context, source, tool.name)
 
                 # Handle other response formats
                 elif "url" in result or "title" in result:
-                    self._process_source(ctx, result, tool.name)
+                    self._process_source(context, result, tool.name)
                 elif "results" in result:
                     for item in result["results"]:
                         if isinstance(item, dict):
-                            self._process_source(ctx, item, tool.name)
+                            self._process_source(context, item, tool.name)
         except Exception as e:
             logger.error(f"Error processing tool result: {e}")
             # Don't re-raise the exception to avoid breaking the agent's flow

@@ -9,7 +9,7 @@ from lumis.kit.graph import Graph, StateProtocol
 from lumis.llm.openai_llm import OpenAILLM
 
 S = TypeVar("S", bound=StateProtocol)
-E = TypeVar("E", bound=str | None)
+E = TypeVar("E", bound=str)
 
 
 class GraphBasedAgent(CoreAgent[E], Generic[S, E]):

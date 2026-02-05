@@ -5,7 +5,7 @@ from datetime import datetime
 import json
 import logging
 import textwrap
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from lumis.core import Chunk
 from lumis.embedding import BaseEmbeddingModel
@@ -40,7 +40,7 @@ class State(TypedDict):
     attempt: int
 
 
-Events = None  # Literal[""]
+Events = Literal["input", "generate_answer"]
 
 
 class QAResearchAgent(GraphBasedAgent[State, Events]):
@@ -207,7 +207,7 @@ class QAResearchAgent(GraphBasedAgent[State, Events]):
 
         # Add the original AI system message and tool context
         messages.append(response)
-        messages.append(ChatCompletionToolMessageParam(role="tool", content=dumped, tool_call_id=tool_call.id))
+        messages.append(ChatCompletionToolMessageParam(role="tool", content=dumped, tool_call_id=tool_call.id)) # type: ignore
 
         return messages
 

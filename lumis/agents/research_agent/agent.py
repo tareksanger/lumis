@@ -4,7 +4,7 @@ from datetime import datetime
 import os
 from typing import cast, Optional
 
-from agents import Agent, function_tool, GuardrailFunctionOutput, input_guardrail, ModelSettings, RunContextWrapper, TContext, TResponseInputItem
+from lumis.evaluators.conciseness_and_clarity_analyzer import TextConcisenessAnalyzer
 
 from .source_tracker import ResearchAgentHooks, ResearchSourceTracker
 from .tools.search import (
@@ -14,7 +14,7 @@ from .tools.search import (
 )
 from .types import ResearchAgentResponse, ResearchCallbackT
 
-from lumis.evaluators.conciseness_and_clarity_analyzer import TextConcisenessAnalyzer
+from agents import Agent, function_tool, GuardrailFunctionOutput, input_guardrail, ModelSettings, RunContextWrapper, TContext, TResponseInputItem
 from openai.types import ChatModel
 
 CHAT_MODEL: ChatModel = cast(ChatModel, os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini"))

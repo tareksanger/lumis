@@ -4,13 +4,12 @@ import asyncio
 from dataclasses import dataclass
 from io import BytesIO
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
 import xml.etree.ElementTree as ET
 
-from typing import TYPE_CHECKING
+from lumis.core.document import Document
 
 import httpx
-from lumis.core.document import Document
 import pymupdf
 
 if TYPE_CHECKING:

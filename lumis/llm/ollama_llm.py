@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 import logging
 import os
 from typing import Any, Callable, Literal, Optional, Type, TypeVar
