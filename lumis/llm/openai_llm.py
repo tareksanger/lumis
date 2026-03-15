@@ -108,19 +108,19 @@ class OpenAILLM(BaseLLM):
     def client(self) -> AsyncOpenAI:
         return self.__client
 
-    def _count_tokens(self, completion: Completion | Response):
+    def _count_tokens(self, response: Completion | Response):
         """
-        Counts the tokens in the completion.
+        Counts the tokens in the response.
 
         Args:
-            completion (Completion): The completion to count the tokens of.
+            response (Completion | Response): The response to count the tokens of.
 
         Returns:
-            Completion: The completion with the token count.
+            Completion | Response: The response with the token count.
         """
         # with sentry_sdk.start_span(op="llm.token.count", name="OpenAI LLM") as span:
         try:
-            if usage := completion.usage:
+            if usage := response.usage:
                 # input_tokens = usage.prompt_tokens if isinstance(usage, CompletionUsage) else usage.input_tokens
                 # output_tokens = usage.completion_tokens if isinstance(usage, CompletionUsage) else usage.output_tokens
                 # record_token_usage(
@@ -149,12 +149,12 @@ class OpenAILLM(BaseLLM):
                 self.logger.debug(f"Updated token count: {self._token_count}")
         except Exception as e:
             self.log_exception(e, level=logging.ERROR)
-        return completion
+        return response
 
     @overload
     async def completion(
         self,
-        model: Optional[ChatModel] = None,
+        model: Optional[ChatModel | str] = None,
         messages: list[ChatCompletionMessageParam] = [],
         n: Literal[1] | None | Omit = omit,
         frequency_penalty: float | Omit | None = omit,
@@ -185,7 +185,7 @@ class OpenAILLM(BaseLLM):
     @overload
     async def completion(
         self,
-        model: Optional[ChatModel] = None,
+        model: Optional[ChatModel | str] = None,
         messages: list[ChatCompletionMessageParam] = [],
         n: int = 2,
         frequency_penalty: float | Omit | None = omit,
@@ -221,7 +221,7 @@ class OpenAILLM(BaseLLM):
     )
     async def completion(  # noqa: C901
         self,
-        model: Optional[ChatModel] = None,
+        model: Optional[ChatModel | str] = None,
         messages: list[ChatCompletionMessageParam] = [],
         n: int | Omit | None = omit,
         frequency_penalty: float | Omit | None = omit,
@@ -404,7 +404,7 @@ class OpenAILLM(BaseLLM):
     )
     async def stream(  # noqa: C901
         self,
-        model: Optional[ChatModel] = None,
+        model: Optional[ChatModel | str] = None,
         messages: list[ChatCompletionMessageParam] = [],
         frequency_penalty: float | Omit | None = omit,
         logit_bias: dict[str, int] | Omit | None = omit,
@@ -511,7 +511,7 @@ class OpenAILLM(BaseLLM):
     async def structured_stream(  # noqa: C901
         self,
         response_format: Type[T],
-        model: Optional[ChatModel] = None,
+        model: Optional[ChatModel | str] = None,
         messages: list[ChatCompletionMessageParam] = [],
         frequency_penalty: float | Omit | None = omit,
         logit_bias: dict[str, int] | Omit | None = omit,
@@ -620,7 +620,7 @@ class OpenAILLM(BaseLLM):
     async def structured_completion(
         self,
         response_format: Type[T],
-        model: Optional[ChatModel] = None,
+        model: Optional[ChatModel | str] = None,
         messages: list[ChatCompletionMessageParam] = [],
         n: Literal[1] | Omit = omit,
         frequency_penalty: float | Omit | None = omit,
@@ -653,7 +653,7 @@ class OpenAILLM(BaseLLM):
     async def structured_completion(
         self,
         response_format: Type[T],
-        model: Optional[ChatModel] = None,
+        model: Optional[ChatModel | str] = None,
         messages: list[ChatCompletionMessageParam] = [],
         n: int = 2,
         frequency_penalty: float | Omit | None = omit,
@@ -690,7 +690,7 @@ class OpenAILLM(BaseLLM):
     async def structured_completion(  # noqa: C901
         self,
         response_format: Type[T] | Omit = omit,
-        model: Optional[ChatModel] = None,
+        model: Optional[ChatModel | str] = None,
         messages: list[ChatCompletionMessageParam] = [],
         n: int | Omit | None = omit,
         frequency_penalty: float | Omit | None = omit,

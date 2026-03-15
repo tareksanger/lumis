@@ -10,14 +10,14 @@ import numpy as np
 
 
 class HuggingFaceEmbeddingModel(BaseEmbeddingModel):
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2", dimension: Optional[int] = None):
-        super().__init__(model_name)
+    def __init__(self, model: str = "all-MiniLM-L6-v2", dimension: Optional[int] = None):
+        super().__init__(model)
         try:
             from sentence_transformers import SentenceTransformer
         except Exception:
             raise ImportError("Failed to import from `sentence_transformers` please make sure this package is installed.")
 
-        self.model = SentenceTransformer(model_name)
+        self.model = SentenceTransformer(model)
 
         self._dimension = dimension or self.model.get_sentence_embedding_dimension()
         self.executor = ThreadPoolExecutor()

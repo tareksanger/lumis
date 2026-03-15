@@ -11,8 +11,8 @@ SimilarityMode = Literal["euclidean", "dot_product", "cosine"]  # noqa: F821
 
 
 class BaseEmbeddingModel(ABC):
-    def __init__(self, model_name: str, *args, **kwargs):
-        self.model_name = model_name
+    def __init__(self, model: str, *args, **kwargs):
+        self.model = model
         self._dimension = 0  # To be set by subclasses
 
     @property

@@ -8,7 +8,7 @@ from lumis.core.utils.coroutine import run_sync
 from .base_embedding import BaseEmbeddingModel, Embedding
 
 import numpy as np
-from openai import AsyncOpenAI, OpenAI
+from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -36,24 +36,23 @@ _DEFAULT_DIMS = {
 
 
 class OpenAIEmbeddingModel(BaseEmbeddingModel):
-    def __init__(self, model_name: str = "text-embedding-3-small", dimension: Optional[int] = None):
-        super().__init__(model_name)
-        self.client = OpenAI()
-        self.aclient = AsyncOpenAI()
+    def __init__(self, model: str = "text-embedding-3-small", dimension: Optional[int] = None, client: Optional[AsyncOpenAI] = None):
+        super().__init__(model)
+        self.aclient = client or AsyncOpenAI()
         # Set the dimension based on the model; for example:
-        self._dimension = dimension or _DEFAULT_DIMS.get(model_name, 1536)
+        self._dimension = dimension or _DEFAULT_DIMS.get(model, 1536)
 
     def embed(self, text: Union[str, list[str]]) -> Embedding:
         return run_sync(self.aembed(text))
 
     async def aembed(self, text: Union[str, list[str]]) -> Embedding:
         if isinstance(text, str):
-            logger.debug("Embedding single string with model %s", self.model_name)
+            logger.debug("Embedding single string with model %s", self.model)
             if text == "":
                 logger.debug("Empty string provided; returning zero vector with dimension %d", self.dimension)
                 return np.zeros(self.dimension, dtype="float32")
 
-            resp = await self.aclient.embeddings.create(model=self.model_name, input=[text])
+            resp = await self.aclient.embeddings.create(model=self.model, input=[text])
             embedding = np.array(resp.data[0].embedding, dtype="float32")
             logger.debug("Received embedding vector length %d", embedding.shape[0])
             return embedding
@@ -62,8 +61,8 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
             logger.debug("Empty list provided; returning empty embedding with dimension %d", self.dimension)
             return np.zeros((0, self.dimension), dtype="float32")
 
-        logger.debug("Embedding %d strings with model %s", len(text), self.model_name)
-        resp = await self.aclient.embeddings.create(model=self.model_name, input=text)
+        logger.debug("Embedding %d strings with model %s", len(text), self.model)
+        resp = await self.aclient.embeddings.create(model=self.model, input=text)
         embeddings = np.array([d.embedding for d in resp.data], dtype="float32")
         logger.debug("Received %d embeddings with vector length %d", embeddings.shape[0], embeddings.shape[1])
         return embeddings
