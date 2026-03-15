@@ -7,7 +7,7 @@ from lumis.llm import OpenAILLM
 from lumis.memory.base_memory import BaseMemory
 from lumis.memory.simple_memory import SimpleMemory
 
-from ..graph import Graph, S
+from ..graph import TERMINATE, S
 
 
 class LLMChatNode(LoggerMixin):
@@ -68,6 +68,6 @@ class LLMChatNode(LoggerMixin):
                         self.logger.info(f"Assistant: {content}" + "\n" + ("-" * 100) + "\n")
 
         except Exception:
-            return Graph.__TERMINATE__
+            return TERMINATE
 
         return {"memory": memory}

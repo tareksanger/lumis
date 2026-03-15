@@ -5,7 +5,7 @@ import logging
 from typing import Generic, Optional, TypeVar
 
 from lumis.agents.base.core_agent import CoreAgent
-from lumis.kit.graph import Graph, StateProtocol
+from lumis.pipeline.graph import Graph, StateProtocol
 from lumis.llm.openai_llm import OpenAILLM
 
 S = TypeVar("S", bound=StateProtocol)

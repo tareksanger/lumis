@@ -12,7 +12,7 @@ from lumis.embedding import BaseEmbeddingModel
 from lumis.llm.openai_llm import OpenAILLM
 from lumis.tools.search import VectorSearchRetrievalEngine
 
-from .base.graph_based_agent import GraphBasedAgent
+from .pipeline import Pipeline
 
 from openai import pydantic_function_tool
 from openai.types.chat import (
@@ -43,7 +43,7 @@ class State(TypedDict):
 Events = Literal["input", "generate_answer"]
 
 
-class QAResearchAgent(GraphBasedAgent[State, Events]):
+class QAResearchPipeline(Pipeline[State, Events]):
     class ErrorMessages:
         EMPTY_QUESTION = "There does not seem to be a valid question. It seems to be am empty string."
         UNABLE = "I am unable to answer your question at this time."
@@ -88,7 +88,7 @@ class QAResearchAgent(GraphBasedAgent[State, Events]):
 
         self.graph.set_initial_state({"question": question, "attempt": 0, "references": [], "answer": None})
 
-    def construct_graph(self):
+    def build(self):
         self.graph.add_node("input", self.input, "start")
         self.graph.add_node("generate_answer", self.generate_answer)
 

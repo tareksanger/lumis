@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import cast, Literal, Optional, TypedDict
 
-from lumis.agents.base import GraphBasedAgent
+from .pipeline import Pipeline
 from lumis.evaluators.conciseness_and_clarity_analyzer import TextConcisenessAnalyzer
 from lumis.llm import OpenAILLM
 
@@ -96,16 +96,16 @@ class PromptRefinementState(TypedDict):
     rewrite: Optional[Rewrite]
 
 
-class PromptRefinementPipeline(GraphBasedAgent[PromptRefinementState, str]):
+class PromptRefinementPipeline(Pipeline[PromptRefinementState, str]):
     def __init__(
         self,
         llm: Optional[OpenAILLM] = None,
-        logger: Optional[logging.Logger] = None,  # 5 minutes per interview
+        logger: Optional[logging.Logger] = None,
         verbose: bool = False,
     ) -> None:
-        super().__init__(llm, logger, verbose)
+        super().__init__(llm, logger=logger, verbose=verbose)
 
-    def construct_graph(self):
+    def build(self):
         self.graph.add_node("check_for_rewrite", self.check_for_rewrite, "start")
         self.graph.add_node("extract_best_rewrite", self.extract_best_rewrite)
 

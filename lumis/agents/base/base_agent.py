@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from abc import ABC
+from abc import ABC, abstractmethod
 import logging
 import os
 from typing import Any, Callable, Literal, Optional, TypeVar
@@ -8,11 +8,10 @@ from typing import Any, Callable, Literal, Optional, TypeVar
 from lumis.core.common.logger_mixin import LoggerMixin
 from lumis.core.event_emitter import EventEmitter
 from lumis.core.utils.string import get_random_string
+from lumis.llm.base_llm import BaseLLM
 from lumis.llm.openai_llm import OpenAILLM
 from lumis.memory import BaseMemory
 from lumis.memory.simple_memory import SimpleMemory
-
-from .core_agent import CoreAgent
 
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from openai import not_given, NotGiven, Omit, omit
@@ -31,10 +30,10 @@ E = TypeVar("E", bound=str)
 CHAT_MODEL: ChatModel = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")  # type: ignore
 
 
-class BaseAgent(CoreAgent[E], ABC):
+class BaseAgent(EventEmitter[E], LoggerMixin, ABC):
     def __init__(
         self,
-        llm: Optional[OpenAILLM] = None,  # fmt: ignore
+        llm: Optional[BaseLLM] = None,  # fmt: ignore
         memory: BaseMemory = SimpleMemory(),
         tools: list[Callable] = [],
         # Note: should we just use the events instead?
@@ -44,8 +43,8 @@ class BaseAgent(CoreAgent[E], ABC):
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        LoggerMixin.__init__(self, logger=logger)
         EventEmitter.__init__(self)
+        LoggerMixin.__init__(self, logger=logger)
 
         if not llm:
             llm = OpenAILLM()
@@ -79,10 +78,20 @@ class BaseAgent(CoreAgent[E], ABC):
     def token_count(self):
         return self.llm.token_count
 
+    @abstractmethod
+    async def run(self, *args, **kwargs): ...
+
+    async def reset(self):
+        self._agent_id = get_random_string(5)
+        await self._reset()
+
+    async def _reset(self):
+        return
+
     async def call_tool(  # noqa: C901
         self,
         model: ChatModel = CHAT_MODEL,
-        messages: list[ChatCompletionMessageParam] = [],
+        messages: list[ChatCompletionMessageParam | dict] = [],
         n: Omit | Literal[1] = omit,
         frequency_penalty: float | Omit | None = omit,
         logit_bias: dict[str, int] | Omit | None = omit,

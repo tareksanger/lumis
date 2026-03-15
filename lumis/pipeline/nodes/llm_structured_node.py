@@ -12,7 +12,7 @@ from lumis.llm import OpenAILLM
 from lumis.memory.base_memory import BaseMemory
 from lumis.memory.simple_memory import SimpleMemory
 
-from ..graph import Graph, S
+from ..graph import TERMINATE, S
 
 T = TypeVar("T", bound=BaseSchema)
 
@@ -66,7 +66,7 @@ class LLMStructuredNode(LoggerMixin):
         except Exception:
             # TODO: Handle all exceptions Properly
             # TEMP
-            return Graph.__TERMINATE__
+            return TERMINATE
 
         updated_state = {"memory": memory}
 

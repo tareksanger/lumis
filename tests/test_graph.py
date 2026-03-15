@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from lumis.kit.graph import Graph
+from lumis.pipeline.graph import Graph, TERMINATE
 
 
 # ---------------------------------------------------------------------------
@@ -19,7 +19,7 @@ class TestGraphNodes:
     def test_duplicate_node_raises(self):
         g = Graph()
         g.add_node("a", lambda s: s)
-        with pytest.raises(AssertionError, match="already exists"):
+        with pytest.raises(ValueError, match="already exists"):
             g.add_node("a", lambda s: s)
 
     def test_starting_node_is_recorded(self):
@@ -31,7 +31,7 @@ class TestGraphNodes:
     def test_duplicate_starting_node_raises(self):
         g = Graph()
         g.add_node("a", lambda s: s, starting_node="start")
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             g.add_node("b", lambda s: s, starting_node="start")
 
 
@@ -65,13 +65,13 @@ class TestGraphEdges:
     def test_chain_requires_multiple_nodes(self):
         g = Graph()
         g.add_node("a", lambda s: s)
-        with pytest.raises(AssertionError, match="more than one"):
+        with pytest.raises(ValueError, match="more than one"):
             g.chain("a")
 
     def test_chain_missing_node_raises(self):
         g = Graph()
         g.add_node("a", lambda s: s)
-        with pytest.raises(AssertionError, match="does not exists"):
+        with pytest.raises(ValueError, match="does not exists"):
             g.chain("a", "missing")
 
     def test_conditional_edges_all_must_have_conditions(self):
@@ -81,7 +81,7 @@ class TestGraphEdges:
 
         g.add_edge("a", "b", condition=lambda s: True)
 
-        with pytest.raises(AssertionError, match="all edges must have conditions"):
+        with pytest.raises(ValueError, match="all edges must have conditions"):
             g.add_edge("a", "c")  # missing condition on second edge
 
 
@@ -168,7 +168,7 @@ class TestGraphTraversal:
             return {"visited": s["visited"] + ["a"]}
 
         def stop(s):
-            return "terminate"
+            return TERMINATE
 
         def visit_c(s):
             return {"visited": s["visited"] + ["c"]}
@@ -182,6 +182,25 @@ class TestGraphTraversal:
 
         assert g.terminate is True
         assert "c" not in g.state["visited"]
+
+    async def test_terminate_string_still_works(self):
+        """Backward compat: returning the string 'terminate' still stops traversal."""
+        g = Graph(initial_state={"visited": []})
+
+        def visit_a(s):
+            return {"visited": s["visited"] + ["a"]}
+
+        def stop(s):
+            return "terminate"
+
+        g.add_node("a", visit_a, starting_node="start")
+        g.add_node("b", stop)
+        g.chain("a", "b")
+
+        with pytest.warns(DeprecationWarning, match="TERMINATE sentinel"):
+            await g.traverse()
+
+        assert g.terminate is True
 
     async def test_conditional_edge_takes_high_branch(self):
         g = Graph(initial_state={"value": 10})
@@ -219,7 +238,7 @@ class TestGraphTraversal:
 
     async def test_no_starting_node_raises(self):
         g = Graph()
-        with pytest.raises(AssertionError, match="No starting node"):
+        with pytest.raises(RuntimeError, match="No starting node"):
             await g.traverse()
 
     async def test_node_returning_none_does_not_change_state(self):
