@@ -1,6 +1,6 @@
 [project]
 name = "lumis-ai"
-version = "0.1.1a7"
+version = "0.1.1a8"
 description = "An AI agent framework for building LLM-powered applications"
 readme = "README.md"
 license = "MIT"
@@ -35,8 +35,8 @@ dependencies = [
     "minify-html>=0.11.0",
     "nltk>=3.9.0",
     "numpy>=1.24",
-    "ollama>=0.3.0",
-    "openai>=1.52.2",
+    "ollama>=0.6.2",
+    "openai>=3.13.0",
     "pandas>=2.0.0",
     "PyMuPDF>=1.22.0",
     "PyPDF2>=3.0.0",
@@ -50,13 +50,13 @@ dependencies = [
     "sentence-transformers>=2.2.2",
     "tenacity>=9.0.0",
     "textstat>=0.7.0",
-    "tiktoken>=0.5.0",
+    "tiktoken>=0.14.0",
     "torch>=2.5.0",
     "transformers>=4.0.0",
     "typing-extensions>=4.0.0",
     "wikipedia>=1.4.0",
-    "google-genai>=1.61.0",
-    "openai-agents>=0.7.0",
+    "google-genai>=2.23.0",
+    "openai-agents>=0.22.2",
 ]
 
 [project.optional-dependencies]

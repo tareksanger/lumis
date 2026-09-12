@@ -97,29 +97,23 @@ class TestBaseEmbeddingSimilarity:
 class TestOpenAIEmbeddingModel:
     @pytest.fixture
     def model(self):
-        with patch("lumis.embedding.openai_embedding.OpenAI"), patch(
-            "lumis.embedding.openai_embedding.AsyncOpenAI"
-        ) as MockAsync:
+        with patch("lumis.embedding.openai_embedding.AsyncOpenAI") as MockAsync:
             from lumis.embedding.openai_embedding import OpenAIEmbeddingModel
 
-            m = OpenAIEmbeddingModel(model_name="text-embedding-3-small")
+            m = OpenAIEmbeddingModel(model="text-embedding-3-small")
             m.aclient = MockAsync.return_value
             return m
 
     # -- dimension resolution --
 
     def test_dimension_from_known_model(self):
-        with patch("lumis.embedding.openai_embedding.OpenAI"), patch(
-            "lumis.embedding.openai_embedding.AsyncOpenAI"
-        ):
+        with patch("lumis.embedding.openai_embedding.AsyncOpenAI"):
             from lumis.embedding.openai_embedding import OpenAIEmbeddingModel
 
             assert OpenAIEmbeddingModel("text-embedding-3-large").dimension == 3072
 
     def test_dimension_custom_override(self):
-        with patch("lumis.embedding.openai_embedding.OpenAI"), patch(
-            "lumis.embedding.openai_embedding.AsyncOpenAI"
-        ):
+        with patch("lumis.embedding.openai_embedding.AsyncOpenAI"):
             from lumis.embedding.openai_embedding import OpenAIEmbeddingModel
 
             assert OpenAIEmbeddingModel("text-embedding-3-large", dimension=512).dimension == 512
