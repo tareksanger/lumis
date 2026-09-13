@@ -132,13 +132,13 @@ class StatusManager:
 
     def is_not_started(self) -> bool:
         """
-        Checks if all section has started.
+        Checks whether all sections are still not started.
 
         Returns:
-            bool: True if any section has started, False otherwise.
+            bool: True if no section has started, False otherwise.
 
         """
-        return not self.all_sections_have_status("notStarted")
+        return self.all_sections_have_status("notStarted")
 
     def has_error(self) -> bool:
         """

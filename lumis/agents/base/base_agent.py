@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections import Counter
 import logging
 import os
 from typing import Any, Callable, Literal, Optional, TypeVar
@@ -8,7 +9,6 @@ from typing import Any, Callable, Literal, Optional, TypeVar
 from lumis.core.common.logger_mixin import LoggerMixin
 from lumis.core.event_emitter import EventEmitter
 from lumis.core.utils.string import get_random_string
-from lumis.llm.base_llm import BaseLLM
 from lumis.llm.openai_llm import OpenAILLM
 from lumis.memory import BaseMemory
 from lumis.memory.simple_memory import SimpleMemory
@@ -33,8 +33,8 @@ CHAT_MODEL: ChatModel = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")  # type: i
 class BaseAgent(EventEmitter[E], LoggerMixin, ABC):
     def __init__(
         self,
-        llm: Optional[BaseLLM] = None,  # fmt: ignore
-        memory: BaseMemory = SimpleMemory(),
+        llm: Optional[OpenAILLM] = None,
+        memory: BaseMemory | None = None,
         tools: list[Callable] = [],
         # Note: should we just use the events instead?
         # evaluator: Optional[Evaluation] = None,
@@ -46,11 +46,11 @@ class BaseAgent(EventEmitter[E], LoggerMixin, ABC):
         EventEmitter.__init__(self)
         LoggerMixin.__init__(self, logger=logger)
 
-        if not llm:
+        if llm is None:
             llm = OpenAILLM()
-        self.llm = llm
+        self.llm: OpenAILLM = llm
 
-        self._memory = memory
+        self._memory = memory if memory is not None else SimpleMemory()
         self._process_tools(tools)
 
         self._agent_id = get_random_string(5)
@@ -75,7 +75,7 @@ class BaseAgent(EventEmitter[E], LoggerMixin, ABC):
         return self.__tool_definitions  # type: ignore
 
     @property
-    def token_count(self):
+    def token_count(self) -> Counter[str]:
         return self.llm.token_count
 
     @abstractmethod
@@ -91,7 +91,7 @@ class BaseAgent(EventEmitter[E], LoggerMixin, ABC):
     async def call_tool(  # noqa: C901
         self,
         model: ChatModel = CHAT_MODEL,
-        messages: list[ChatCompletionMessageParam | dict] = [],
+        messages: list[ChatCompletionMessageParam] = [],
         n: Omit | Literal[1] = omit,
         frequency_penalty: float | Omit | None = omit,
         logit_bias: dict[str, int] | Omit | None = omit,

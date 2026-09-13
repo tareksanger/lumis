@@ -7,7 +7,7 @@ from lumis.llm import OpenAILLM
 from lumis.memory.base_memory import BaseMemory
 from lumis.memory.simple_memory import SimpleMemory
 
-from ..graph import TERMINATE, S
+from ..graph import StateProtocol, TERMINATE
 
 
 class LLMChatNode(LoggerMixin):
@@ -17,7 +17,7 @@ class LLMChatNode(LoggerMixin):
         self.system_prompt = system_prompt
         self.verbose = verbose
 
-    def _get_memory(self, state: S):
+    def _get_memory(self, state: StateProtocol) -> BaseMemory:
         memory = state.get("memory", None)
 
         if not isinstance(memory, BaseMemory):
@@ -29,10 +29,10 @@ class LLMChatNode(LoggerMixin):
 
         return memory
 
-    async def __call__(self, state: S):
+    async def __call__(self, state: StateProtocol):
         return await self.call_llm(state)
 
-    async def call_llm(self, state: S):
+    async def call_llm(self, state: StateProtocol):
         memory = self._get_memory(state)
         messages = await memory.get()
 

@@ -1,4 +1,5 @@
 """Backward-compatibility stub. The utils module has moved to lumis.pipeline.utils."""
+
 from __future__ import annotations
 
 import warnings as _warnings

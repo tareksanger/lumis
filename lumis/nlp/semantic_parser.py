@@ -3,9 +3,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any, List, Optional
 
-from asgiref.sync import sync_to_async
 from lumis.core.document import Chunk, Document
 from lumis.embedding import BaseEmbeddingModel
+
+from asgiref.sync import sync_to_async
 import nltk
 from nltk.tokenize import word_tokenize
 import numpy as np
@@ -141,14 +142,14 @@ class SemanticParser:
             start_index = 0
             for index in indices_above_threshold:
                 group = sentences[start_index : index + 1]
-                group_text = "".join([d["sentence"] for d in group])
+                group_text = " ".join([d["sentence"] for d in group])
                 # Split into sub-chunks if exceeding self.max_tokens
                 sub_chunks = self._split_text_by_token_limit(group_text, metadata, parent_id)
                 chunks.extend(sub_chunks)
                 start_index = index + 1
 
             if start_index < len(sentences):
-                group_text = "".join([d["sentence"] for d in sentences[start_index:]])
+                group_text = " ".join([d["sentence"] for d in sentences[start_index:]])
                 sub_chunks = self._split_text_by_token_limit(group_text, metadata, parent_id)
                 chunks.extend(sub_chunks)
 

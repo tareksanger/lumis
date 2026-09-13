@@ -3,6 +3,7 @@ from typing import Sequence, Tuple, Union
 
 from dateutil.parser import parse
 
+
 def seconds_to_readable(seconds: int) -> str:
     """
     This function works by iterating over the periods list and using integer division and the
@@ -42,7 +43,10 @@ DateObject = Union[str, datetime, date]
 
 def to_datetime(input: DateObject) -> datetime:
     """
-    Convert a string, datetime, or date object to a datetime object.
+    Convert a string, datetime, or date object to a UTC datetime object.
+
+    Naive inputs are interpreted as UTC; timezone-aware inputs are converted
+    to UTC while preserving the instant they represent.
 
     Args:
     input_string (Union[str, datetime, date]): The input to convert.
@@ -54,12 +58,16 @@ def to_datetime(input: DateObject) -> datetime:
     ValueError: If the input string cannot be parsed into a valid datetime.
     """
     if isinstance(input, datetime):
+        if input.tzinfo is not None and input.utcoffset() is not None:
+            return input.astimezone(timezone.utc)
         return input.replace(tzinfo=timezone.utc)
     elif isinstance(input, date):
         return datetime.combine(input, datetime.min.time(), tzinfo=timezone.utc)
 
     try:
         dt = parse(input)
+        if dt.tzinfo is not None and dt.utcoffset() is not None:
+            return dt.astimezone(timezone.utc)
         return dt.replace(tzinfo=timezone.utc)
     except ValueError:
         raise ValueError(f"Unable to parse '{input}' into a valid datetime")

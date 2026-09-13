@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 def dict_diff(d1: dict, d2: dict) -> dict:
     """
     Compute the difference between two nested dictionaries.

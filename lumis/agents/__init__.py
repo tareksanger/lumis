@@ -18,6 +18,7 @@ def __getattr__(name: str):
             stacklevel=2,
         )
         from lumis.pipeline.qa_research_pipeline import QAResearchPipeline
+
         return QAResearchPipeline
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

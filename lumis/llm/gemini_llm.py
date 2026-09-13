@@ -115,8 +115,8 @@ class Gemini(BaseLLM):
 
     def _count_tokens(  # noqa: C901
         self,
-        response: (GenerateContentResponse | GenerateImagesResponse | GenerateVideosResponse),
-    ) -> GenerateContentResponse | GenerateImagesResponse | GenerateVideosResponse:
+        response: ResponseT,
+    ) -> ResponseT:
         """
         Counts the tokens in the response.
         """
@@ -141,7 +141,7 @@ class Gemini(BaseLLM):
                 if "candidates_tokens_details" in usage_dict:
                     usage_dict.pop("candidates_tokens_details")
 
-                self._token_count.update(usage_dict)
+                self._token_count.update({key: value for key, value in usage_dict.items() if isinstance(value, int)})
 
         except Exception as e:
             self.log_exception(e, level=logging.ERROR)
@@ -159,7 +159,7 @@ class Gemini(BaseLLM):
         contents: Union[ContentListUnion, ContentListUnionDict, str] = [],
         config: Optional[GenerateContentConfigOrDict] = None,
         use_search: bool = True,
-    ):
+    ) -> GenerateContentResponse:
         if isinstance(contents, str):
             contents = [contents]
 
@@ -209,7 +209,7 @@ class Gemini(BaseLLM):
                 config=config,
             )
 
-            async for chunk in await stream:
+            async for chunk in stream:
                 chunk = await self._apply_middlewares(chunk)
                 yield chunk
 
@@ -268,7 +268,7 @@ class Gemini(BaseLLM):
         prompt: str,
         model: str = "imagen-3.0-generate-002",
         config: Optional[GenerateImagesConfigOrDict] = None,
-    ):
+    ) -> GenerateImagesResponse:
         self.logger.debug(
             f"Generating image with model={model}, prompt_type={type(prompt)} config_keys={config.model_dump(exclude_none=True).keys() if isinstance(config, BaseModel) else 'None' if config is None else config.keys()}"  # noqa: E501
         )
@@ -331,12 +331,13 @@ class Gemini(BaseLLM):
             # Extract sources from grounding metadata
             sources = []
             source_map = {}  # url -> source index
+            chunk_source_map = {}  # original grounding chunk index -> source index
 
             if response.candidates and response.candidates[0].grounding_metadata:
                 grounding = response.candidates[0].grounding_metadata
 
                 # First pass: collect all unique sources
-                for chunk in grounding.grounding_chunks or []:
+                for chunk_index, chunk in enumerate(grounding.grounding_chunks or []):
                     if chunk.web and chunk.web.uri and chunk.web.uri not in source_map:
                         source_map[chunk.web.uri] = len(sources)
                         sources.append(
@@ -347,6 +348,8 @@ class Gemini(BaseLLM):
                                 "segments": [],
                             }
                         )
+                    if chunk.web and chunk.web.uri:
+                        chunk_source_map[chunk_index] = source_map[chunk.web.uri]
 
                 # Second pass: process grounding supports to add segments
                 if grounding.grounding_supports:
@@ -357,10 +360,11 @@ class Gemini(BaseLLM):
                                 support.grounding_chunk_indices,
                                 support.confidence_scores,
                             ):
-                                if idx < len(sources):
-                                    sources[idx]["confidence"] = max(sources[idx]["confidence"], float(score))
+                                source_index = chunk_source_map.get(idx)
+                                if source_index is not None:
+                                    sources[source_index]["confidence"] = max(sources[source_index]["confidence"], float(score))
                                     # Add segment to source
-                                    sources[idx]["segments"].append(
+                                    sources[source_index]["segments"].append(
                                         {
                                             "text": segment_text,
                                             "confidence": float(score),

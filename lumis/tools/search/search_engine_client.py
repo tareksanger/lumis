@@ -11,12 +11,14 @@ import redis.asyncio as aioredis
 from typing_extensions import TypedDict
 
 try:
-    from tavili import TavilyClient, UsageLimitExceededError
+    from tavily import TavilyClient
+    from tavily.errors import UsageLimitExceededError
 except ImportError:
     TavilyClient = None  # type: ignore[assignment,misc]
 
     class UsageLimitExceededError(Exception):  # type: ignore[no-redef]
         pass
+
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +60,7 @@ class SearchEngineClient:
             tavily_client (Optional[TavilyClient], optional): Optional TavilyClient instance.
             max_workers (int, optional): Maximum number of worker threads for the executor.
         """
-        self.tavily = tavily_client if tavily_client is not None else TavilyClient()
+        self.tavily = tavily_client
         self.redis = redis_client
         self.cache_ttl = cache_ttl
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
@@ -83,7 +85,7 @@ class SearchEngineClient:
         Returns:
             list[SearchResult]: The search results.
         """
-        cache_key = self._generate_cache_key(query, search_engine, topic)
+        cache_key = self._generate_cache_key(query, search_engine, topic, max_results)
         if self.redis:
             cached_data = await self.redis.get(cache_key)
             if cached_data:
@@ -127,7 +129,7 @@ class SearchEngineClient:
 
         return results
 
-    def _generate_cache_key(self, query: str, search_engine: SearchEngine, topic: str) -> str:
+    def _generate_cache_key(self, query: str, search_engine: SearchEngine, topic: str, max_results: int = 10) -> str:
         """
         Generates a unique cache key based on the search parameters.
 
@@ -141,7 +143,7 @@ class SearchEngineClient:
         """
         # Normalize the query to ensure consistent cache keys
         normalized_query = query.strip().lower()
-        return f"search:{search_engine}:{topic}:{normalized_query}"
+        return f"search:{search_engine}:{topic}:{normalized_query}:limit:{max_results}"
 
     async def search_google(self, query: str, max_results: int = 10) -> list[SearchResult]:
         """
@@ -159,7 +161,7 @@ class SearchEngineClient:
             logger.debug(f"Initiating Google search for query: {query}")
             results = await loop.run_in_executor(
                 self.executor,
-                lambda: google_search(query, num_results=max_results, advanced=True),
+                lambda: list(google_search(query, num_results=max_results, advanced=True)),
             )
             search_results = [
                 SearchResult(
@@ -192,7 +194,7 @@ class SearchEngineClient:
         include_raw_content: bool = True,
         include_images: bool = False,
     ):
-        return self.search_tavily(
+        return await self.search_tavily(
             query=query,
             search_depth=search_depth,
             topic=topic,
@@ -233,24 +235,31 @@ class SearchEngineClient:
 
         loop = asyncio.get_event_loop()
         try:
+            if self.tavily is None:
+                if TavilyClient is None:
+                    raise ImportError("Tavily search requires: pip install lumis-ai[search]")
+                self.tavily = TavilyClient()
             logger.debug(f"Initiating Tavily search for query: {query} with topic: {topic}")
             results = await loop.run_in_executor(
                 self.executor,
                 lambda: self.tavily.search(
                     query=query,
-                    # search_depth=search_depth,
+                    search_depth=search_depth,
                     topic=topic,
-                    # days=days,
+                    days=days,
                     max_results=max_results,
-                    # include_domains=include_domains,
-                    # exclude_domains=exclude_domains,
-                    # include_answer=include_answer,
-                    # include_raw_content=include_raw_content,
-                    # include_images=include_images,
+                    include_domains=include_domains,
+                    exclude_domains=exclude_domains,
+                    include_answer=include_answer,
+                    include_raw_content=include_raw_content,
+                    include_images=include_images,
+                    **kwargs,
                 ),
             )
             search_results = [
-                SearchResult(title=str(result.get("title", "")), url=str(result.get("url", "")), description=str(result.get("description", "")), raw_content=str(result.get("raw_content")))
+                SearchResult(
+                    title=str(result.get("title", "")), url=str(result.get("url", "")), description=str(result.get("content") or result.get("description") or ""), raw_content=result.get("raw_content")
+                )
                 for result in results.get("results", [])
             ]
             logger.debug(f"Tavily search returned {len(search_results)} results for query: {query}")
@@ -280,24 +289,24 @@ class SearchEngineClient:
             logger.warning("Redis is not provided. Cannot clear cache.")
             return
 
-        if query and search_engine and topic:
-            cache_key = self._generate_cache_key(query, search_engine, topic)
-            await self.redis.delete(cache_key)
-            logger.debug(f"Cleared cache for key: {cache_key}")
-        else:
-            # Clear all keys matching the search cache pattern
-            pattern = "search:*"
-            keys = []
-            try:
-                async for key in self.redis.scan_iter(match=pattern):
+        # Scan all search entries, then filter literal components rather than
+        # interpolating user queries into Redis glob patterns.
+        prefix = f"search:{search_engine}:{topic}:" if query and search_engine and topic else None
+        normalized_query = query.strip().lower() if query else None
+        keys = []
+        try:
+            async for key in self.redis.scan_iter(match="search:*"):
+                decoded = key.decode() if isinstance(key, bytes) else key
+                if (
+                    prefix is None
+                    or decoded == f"{prefix}{normalized_query}"
+                    or (decoded.startswith(f"{prefix}{normalized_query}:limit:") and decoded.removeprefix(f"{prefix}{normalized_query}:limit:").isdigit())
+                ):
                     keys.append(key)
-                if keys:
-                    await self.redis.delete(*keys)
-                    logger.debug(f"Cleared {len(keys)} cache entries.")
-                else:
-                    logger.debug("No cache entries to clear.")
-            except Exception as e:
-                logger.exception(f"Failed to clear cache. Error: {e}")
+            if keys:
+                await self.redis.delete(*keys)
+        except Exception as e:
+            logger.exception(f"Failed to clear cache. Error: {e}")
 
     async def shutdown(self):
         """

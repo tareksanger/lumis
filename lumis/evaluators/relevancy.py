@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import Counter
+from math import sqrt
 import re
 
 
@@ -28,13 +30,12 @@ class TextRelevancyAnalyzer:
         - Use cosine similarity when you need to measure the similarity between texts
           based on the frequency of shared words.
         """
-        # Tokenize and count word frequencies for each text
-        # embeddings1 = cls.get_embeddings(text1)
-        # embeddings2 = cls.get_embeddings(text2)
-
-        # # Calculate cosine similarity
-        # return dot(embeddings1, embeddings2) / (norm(embeddings1) * norm(embeddings2))
-        return 0.0
+        counts1 = Counter(cls.__preprocess(text1))
+        counts2 = Counter(cls.__preprocess(text2))
+        denominator = sqrt(sum(v * v for v in counts1.values())) * sqrt(sum(v * v for v in counts2.values()))
+        if not denominator:
+            return 0.0
+        return sum(value * counts2[word] for word, value in counts1.items()) / denominator
 
     @classmethod
     def jaccard_similarity(cls, text1: str, text2: str) -> float:

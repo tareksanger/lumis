@@ -19,6 +19,7 @@ from pyvis.network import Network
 
 class _Terminate:
     """Singleton sentinel object for graph termination."""
+
     _instance = None
 
     def __new__(cls):
@@ -402,8 +403,7 @@ class Graph(Generic[S], EventEmitter[Events], LoggerMixin):
         if result is TERMINATE or result == "terminate":
             if isinstance(result, str) and result == "terminate":
                 warnings.warn(
-                    'Returning the string "terminate" is deprecated. Use TERMINATE sentinel instead: '
-                    'from lumis.pipeline import TERMINATE',
+                    'Returning the string "terminate" is deprecated. Use TERMINATE sentinel instead: from lumis.pipeline import TERMINATE',
                     DeprecationWarning,
                     stacklevel=4,
                 )

@@ -1,4 +1,5 @@
 """Backward-compatibility stub. The graph module has moved to lumis.pipeline.graph."""
+
 from __future__ import annotations
 
 import warnings as _warnings

@@ -11,7 +11,9 @@ def serialize(obj):
     """
     Recursively serialize an object or dictionary, converting custom classes to dictionaries.
     """
-    if hasattr(obj, "dict"):
+    if isinstance(obj, BaseModel):
+        return {key: serialize(value) for key, value in obj.model_dump().items()}
+    elif hasattr(obj, "dict"):
         # Serialize custom class by its __dict__ attribute
         return {key: serialize(value) for key, value in obj.dict().items()}
 
@@ -29,15 +31,13 @@ def serialize(obj):
         return obj
 
 
-_tokenizer_instance = None
+_tokenizer_instances: dict[str, tiktoken.Encoding] = {}
 
 
 def get_tokenizer(chat_model: str) -> tiktoken.Encoding:
-    global _tokenizer_instance
-    if _tokenizer_instance is None:
-        # Load the tokenizer only once
-        _tokenizer_instance = tiktoken.encoding_for_model(chat_model)
-    return _tokenizer_instance
+    if chat_model not in _tokenizer_instances:
+        _tokenizer_instances[chat_model] = tiktoken.encoding_for_model(chat_model)
+    return _tokenizer_instances[chat_model]
 
 
 T = TypeVar("T", bound=BaseModel)

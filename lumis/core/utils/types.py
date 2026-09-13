@@ -9,6 +9,7 @@ from pydantic.alias_generators import to_snake
 
 logger = logging.getLogger(__name__)
 
+
 def _metadata_to_dict(metadata: list[Any]) -> dict[str, Any]:
     result = {}
     for item in metadata:
@@ -31,7 +32,7 @@ class BaseSchema(BaseModel):
         parts = []
         indent = "\t" * depth
 
-        for field_name, field_info in self.model_fields.items():
+        for field_name, field_info in type(self).model_fields.items():
             context = _metadata_to_dict(field_info.metadata).get("context", False)
             if not context:
                 logger.debug(f"{field_name} left out of context while generating context string.")
@@ -75,7 +76,7 @@ class BaseSchema(BaseModel):
                     else:
                         parts.append(f"{indent_str}{key_title}: {v}")
 
-            else: 
+            else:
                 # Scalar values
                 parts.append(f"{indent}{field_title}: {value}")
 
@@ -108,4 +109,3 @@ class BaseSchema(BaseModel):
         if isinstance(values, dict):
             return {to_snake(k): v for k, v in values.items()}
         return values
-

@@ -4,21 +4,7 @@ from inspect import iscoroutinefunction
 import json
 import logging
 import os
-from typing import (
-    Any,
-    Callable,
-    cast,
-    Iterable,
-    List,
-    Literal,
-    Mapping,
-    Optional,
-    overload,
-    Type,
-    TypedDict,
-    TypeVar,
-    Union,
-)
+from typing import Any, Callable, cast, Iterable, List, Literal, Mapping, Optional, overload, Type, TypedDict, TypeVar, Union
 
 from lumis.llm.base_llm import BaseLLM
 
@@ -44,24 +30,15 @@ from openai.types.chat import (
 )
 from openai.types.chat.chat_completion import ChoiceLogprobs
 from openai.types.chat.chat_completion_token_logprob import TopLogprob
-from openai.types.chat.completion_create_params import (
-    WebSearchOptions,
-)
+from openai.types.chat.completion_create_params import WebSearchOptions
 from openai.types.chat.parsed_chat_completion import ParsedChatCompletionMessage
 from openai.types.images_response import ImagesResponse
-from openai.types.responses import (
-    Response,
-    ResponseCustomToolCall,
-    ResponseFunctionToolCall,
-    ResponseIncludable,
-    ResponseInputParam,
-    ResponsePromptParam,
-    ResponseTextConfigParam,
-    ToolParam,
-)
+from openai.types.responses import Response, ResponseCustomToolCall, ResponseFunctionToolCall, ResponseIncludable, ResponseInputParam, ResponsePromptParam, ResponseTextConfigParam, ToolParam
 from openai.types.responses.response_create_params import Conversation, ToolChoice
+from openai.types.responses.response_custom_tool_call_output_param import ResponseCustomToolCallOutputParam
 from openai.types.responses.response_input_param import FunctionCallOutput
-from pydantic import BaseModel
+from openai.types.shared_params.reasoning import Reasoning as ReasoningParam
+from pydantic import BaseModel, TypeAdapter
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 # from openai.types.completion_usage import CompletionUsage
@@ -69,6 +46,7 @@ T = TypeVar("T", bound=BaseModel)
 
 Completion = ChatCompletion | ParsedChatCompletion | ChatCompletionChunk
 CompletionT = TypeVar("CompletionT")
+_REASONING_ADAPTER = TypeAdapter(ReasoningParam)
 
 CHAT_MODEL: ChatModel = cast(ChatModel, os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini"))
 REASONING_MODEL: ChatModel = cast(ChatModel, os.getenv("OPENAI_REASONING_MODEL", "o3-mini"))
@@ -108,7 +86,7 @@ class OpenAILLM(BaseLLM):
     def client(self) -> AsyncOpenAI:
         return self.__client
 
-    def _count_tokens(self, response: Completion | Response):
+    def _count_tokens(self, response: CompletionT) -> CompletionT:
         """
         Counts the tokens in the response.
 
@@ -120,7 +98,7 @@ class OpenAILLM(BaseLLM):
         """
         # with sentry_sdk.start_span(op="llm.token.count", name="OpenAI LLM") as span:
         try:
-            if usage := response.usage:
+            if usage := getattr(response, "usage", None):
                 # input_tokens = usage.prompt_tokens if isinstance(usage, CompletionUsage) else usage.input_tokens
                 # output_tokens = usage.completion_tokens if isinstance(usage, CompletionUsage) else usage.output_tokens
                 # record_token_usage(
@@ -187,7 +165,7 @@ class OpenAILLM(BaseLLM):
         self,
         model: Optional[ChatModel | str] = None,
         messages: list[ChatCompletionMessageParam] = [],
-        n: int = 2,
+        n: Literal[2, 3, 4, 5, 6, 7, 8, 9, 10] = 2,
         frequency_penalty: float | Omit | None = omit,
         logit_bias: dict[str, int] | Omit | None = omit,
         logprobs: bool | Omit | None = omit,
@@ -212,6 +190,37 @@ class OpenAILLM(BaseLLM):
         extra_body: Body | None = None,
         timeout: float | NotGiven | None = not_given,
     ) -> List[ChatCompletionMessage]: ...
+
+    @overload
+    async def completion(
+        self,
+        model: Optional[ChatModel | str] = None,
+        messages: list[ChatCompletionMessageParam] = [],
+        n: int | None | Omit = omit,
+        frequency_penalty: float | Omit | None = omit,
+        logit_bias: dict[str, int] | Omit | None = omit,
+        logprobs: bool | Omit | None = omit,
+        max_completion_tokens: int | Omit | None = omit,
+        max_tokens: int | Omit | None = omit,
+        metadata: dict[str, str] | Omit | None = omit,
+        parallel_tool_calls: bool | Omit = omit,
+        presence_penalty: float | Omit | None = omit,
+        reasoning_effort: ChatCompletionReasoningEffort | Omit = omit,
+        seed: int | Omit | None = omit,
+        service_tier: Omit | Literal["auto", "default"] | None = omit,
+        stop: str | List[str] | Omit | None = omit,
+        store: bool | Omit | None = omit,
+        temperature: float | Omit | None = omit,
+        tool_choice: ChatCompletionToolChoiceOptionParam | Omit = omit,
+        tools: Iterable[ChatCompletionToolParam] | Omit = omit,
+        top_logprobs: int | Omit | None = omit,
+        top_p: float | Omit | None = omit,
+        user: str | Omit = omit,
+        extra_headers: Headers | None = None,
+        extra_query: Query | None = None,
+        extra_body: Body | None = None,
+        timeout: float | NotGiven | None = not_given,
+    ) -> ChatCompletionMessage | List[ChatCompletionMessage]: ...
 
     @retry(
         stop=stop_after_attempt(5),
@@ -306,7 +315,7 @@ class OpenAILLM(BaseLLM):
 
             # Return all choices if n > 1, otherwise return the first choice
             if isinstance(n, int) and n > 1:
-                return [choice.message for choice in completion.choices]  # type: ignore
+                return [choice.message for choice in completion.choices]
             return completion.choices[0].message
 
         except Exception as e:
@@ -334,8 +343,8 @@ class OpenAILLM(BaseLLM):
         previous_response_id: str | Omit | None = omit,
         prompt: ResponsePromptParam | Omit | None = omit,
         prompt_cache_key: str | Omit = omit,
-        prompt_cache_retention: Literal["in-memory", "24h"] | Omit | None = omit,
-        reasoning: Reasoning | Omit | None = None,
+        prompt_cache_retention: Literal["in_memory", "in-memory", "24h"] | Omit | None = omit,
+        reasoning: Reasoning | ReasoningParam | Omit | None = None,
         safety_identifier: str | Omit = omit,
         service_tier: Omit | Literal["auto", "default", "flex", "scale", "priority"] | None = omit,
         store: bool | Omit | None = omit,
@@ -369,8 +378,8 @@ class OpenAILLM(BaseLLM):
                 previous_response_id=previous_response_id,
                 prompt=prompt,
                 prompt_cache_key=prompt_cache_key,
-                prompt_cache_retention=prompt_cache_retention,
-                reasoning=reasoning,  # type: ignore
+                prompt_cache_retention="in_memory" if prompt_cache_retention == "in-memory" else prompt_cache_retention,
+                reasoning=_REASONING_ADAPTER.validate_python(reasoning.model_dump(exclude_none=True)) if isinstance(reasoning, Reasoning) else reasoning,
                 safety_identifier=safety_identifier,
                 service_tier=service_tier,
                 store=store,
@@ -602,7 +611,7 @@ class OpenAILLM(BaseLLM):
                     async for event in stream:
                         # Apply middlewares to the accumulated completion if it's the final chunk
                         if event.type == "chunk":
-                            await self._apply_middlewares(event.chunk)  # type: ignore
+                            await self._apply_middlewares(event.chunk)
 
                         # Yield the original chunk
                         yield event
@@ -622,7 +631,7 @@ class OpenAILLM(BaseLLM):
         response_format: Type[T],
         model: Optional[ChatModel | str] = None,
         messages: list[ChatCompletionMessageParam] = [],
-        n: Literal[1] | Omit = omit,
+        n: Literal[1] | None | Omit = omit,
         frequency_penalty: float | Omit | None = omit,
         logit_bias: dict[str, int] | Omit | None = omit,
         logprobs: bool | Omit | None = omit,
@@ -655,7 +664,7 @@ class OpenAILLM(BaseLLM):
         response_format: Type[T],
         model: Optional[ChatModel | str] = None,
         messages: list[ChatCompletionMessageParam] = [],
-        n: int = 2,
+        n: Literal[2, 3, 4, 5, 6, 7, 8, 9, 10] = 2,
         frequency_penalty: float | Omit | None = omit,
         logit_bias: dict[str, int] | Omit | None = omit,
         logprobs: bool | Omit | None = omit,
@@ -681,6 +690,138 @@ class OpenAILLM(BaseLLM):
         extra_body: Body | None = None,
         timeout: float | NotGiven | None = not_given,
     ) -> List[ParsedChatCompletionMessage[T]]: ...
+
+    @overload
+    async def structured_completion(
+        self,
+        response_format: Type[T],
+        model: Optional[ChatModel | str] = None,
+        messages: list[ChatCompletionMessageParam] = [],
+        n: int | None | Omit = omit,
+        frequency_penalty: float | Omit | None = omit,
+        logit_bias: dict[str, int] | Omit | None = omit,
+        logprobs: bool | Omit | None = omit,
+        web_search_options: WebSearchOptions | Omit = omit,
+        max_completion_tokens: int | Omit | None = omit,
+        max_tokens: int | Omit | None = omit,
+        metadata: dict[str, str] | Omit | None = omit,
+        parallel_tool_calls: bool | Omit = omit,
+        presence_penalty: float | Omit | None = omit,
+        reasoning_effort: ChatCompletionReasoningEffort | Omit = omit,
+        seed: int | Omit | None = omit,
+        service_tier: Omit | Literal["auto", "default"] | None = omit,
+        stop: str | List[str] | Omit | None = omit,
+        store: bool | Omit | None = omit,
+        temperature: float | Omit | None = omit,
+        tool_choice: ChatCompletionToolChoiceOptionParam | Omit = omit,
+        tools: Iterable[ChatCompletionToolParam] | Omit = omit,
+        top_logprobs: int | Omit | None = omit,
+        top_p: float | Omit | None = omit,
+        user: str | Omit = omit,
+        extra_headers: Headers | None = None,
+        extra_query: Query | None = None,
+        extra_body: Body | None = None,
+        timeout: float | NotGiven | None = not_given,
+    ) -> ParsedChatCompletionMessage[T] | List[ParsedChatCompletionMessage[T]]: ...
+
+    @overload
+    async def structured_completion(
+        self,
+        response_format: Omit = omit,
+        model: Optional[ChatModel | str] = None,
+        messages: list[ChatCompletionMessageParam] = [],
+        n: Literal[1] | None | Omit = omit,
+        frequency_penalty: float | Omit | None = omit,
+        logit_bias: dict[str, int] | Omit | None = omit,
+        logprobs: bool | Omit | None = omit,
+        web_search_options: WebSearchOptions | Omit = omit,
+        max_completion_tokens: int | Omit | None = omit,
+        max_tokens: int | Omit | None = omit,
+        metadata: dict[str, str] | Omit | None = omit,
+        parallel_tool_calls: bool | Omit = omit,
+        presence_penalty: float | Omit | None = omit,
+        reasoning_effort: ChatCompletionReasoningEffort | Omit = omit,
+        seed: int | Omit | None = omit,
+        service_tier: Omit | Literal["auto", "default"] | None = omit,
+        stop: str | List[str] | Omit | None = omit,
+        store: bool | Omit | None = omit,
+        temperature: float | Omit | None = omit,
+        tool_choice: ChatCompletionToolChoiceOptionParam | Omit = omit,
+        tools: Iterable[ChatCompletionToolParam] | Omit = omit,
+        top_logprobs: int | Omit | None = omit,
+        top_p: float | Omit | None = omit,
+        user: str | Omit = omit,
+        extra_headers: Headers | None = None,
+        extra_query: Query | None = None,
+        extra_body: Body | None = None,
+        timeout: float | NotGiven | None = not_given,
+    ) -> ParsedChatCompletionMessage[None]: ...
+
+    @overload
+    async def structured_completion(
+        self,
+        response_format: Omit = omit,
+        model: Optional[ChatModel | str] = None,
+        messages: list[ChatCompletionMessageParam] = [],
+        n: Literal[2, 3, 4, 5, 6, 7, 8, 9, 10] = 2,
+        frequency_penalty: float | Omit | None = omit,
+        logit_bias: dict[str, int] | Omit | None = omit,
+        logprobs: bool | Omit | None = omit,
+        web_search_options: WebSearchOptions | Omit = omit,
+        max_completion_tokens: int | Omit | None = omit,
+        max_tokens: int | Omit | None = omit,
+        metadata: dict[str, str] | Omit | None = omit,
+        parallel_tool_calls: bool | Omit = omit,
+        presence_penalty: float | Omit | None = omit,
+        reasoning_effort: ChatCompletionReasoningEffort | Omit = omit,
+        seed: int | Omit | None = omit,
+        service_tier: Omit | Literal["auto", "default"] | None = omit,
+        stop: str | List[str] | Omit | None = omit,
+        store: bool | Omit | None = omit,
+        temperature: float | Omit | None = omit,
+        tool_choice: ChatCompletionToolChoiceOptionParam | Omit = omit,
+        tools: Iterable[ChatCompletionToolParam] | Omit = omit,
+        top_logprobs: int | Omit | None = omit,
+        top_p: float | Omit | None = omit,
+        user: str | Omit = omit,
+        extra_headers: Headers | None = None,
+        extra_query: Query | None = None,
+        extra_body: Body | None = None,
+        timeout: float | NotGiven | None = not_given,
+    ) -> List[ParsedChatCompletionMessage[None]]: ...
+
+    @overload
+    async def structured_completion(
+        self,
+        response_format: Omit = omit,
+        model: Optional[ChatModel | str] = None,
+        messages: list[ChatCompletionMessageParam] = [],
+        n: int | None | Omit = omit,
+        frequency_penalty: float | Omit | None = omit,
+        logit_bias: dict[str, int] | Omit | None = omit,
+        logprobs: bool | Omit | None = omit,
+        web_search_options: WebSearchOptions | Omit = omit,
+        max_completion_tokens: int | Omit | None = omit,
+        max_tokens: int | Omit | None = omit,
+        metadata: dict[str, str] | Omit | None = omit,
+        parallel_tool_calls: bool | Omit = omit,
+        presence_penalty: float | Omit | None = omit,
+        reasoning_effort: ChatCompletionReasoningEffort | Omit = omit,
+        seed: int | Omit | None = omit,
+        service_tier: Omit | Literal["auto", "default"] | None = omit,
+        stop: str | List[str] | Omit | None = omit,
+        store: bool | Omit | None = omit,
+        temperature: float | Omit | None = omit,
+        tool_choice: ChatCompletionToolChoiceOptionParam | Omit = omit,
+        tools: Iterable[ChatCompletionToolParam] | Omit = omit,
+        top_logprobs: int | Omit | None = omit,
+        top_p: float | Omit | None = omit,
+        user: str | Omit = omit,
+        extra_headers: Headers | None = None,
+        extra_query: Query | None = None,
+        extra_body: Body | None = None,
+        timeout: float | NotGiven | None = not_given,
+    ) -> ParsedChatCompletionMessage[None] | List[ParsedChatCompletionMessage[None]]: ...
 
     @retry(
         stop=stop_after_attempt(5),
@@ -717,7 +858,7 @@ class OpenAILLM(BaseLLM):
         extra_query: Query | None = None,
         extra_body: Body | None = None,
         timeout: float | NotGiven | None = not_given,
-    ) -> Union[ParsedChatCompletionMessage[T], List[ParsedChatCompletionMessage[T]]]:
+    ) -> ParsedChatCompletionMessage[T] | List[ParsedChatCompletionMessage[T]] | ParsedChatCompletionMessage[None] | List[ParsedChatCompletionMessage[None]]:
         """
         Gets a structured completion from the OpenAI API.
 
@@ -804,7 +945,7 @@ class OpenAILLM(BaseLLM):
         extra_headers: Headers | None = None,
         extra_query: Query | None = None,
         extra_body: Body | None = None,
-        timeout: float | httpx.Timeout | None | NotGiven = not_given,
+        timeout: float | Timeout | httpx.Timeout | None | NotGiven = not_given,
     ) -> ImagesResponse:
         """
         Generates an image using the OpenAI DALL-E model.
@@ -833,7 +974,7 @@ class OpenAILLM(BaseLLM):
                 extra_headers=extra_headers,
                 extra_query=extra_query,
                 extra_body=extra_body,
-                timeout=timeout,
+                timeout=Timeout(connect=timeout.connect, read=timeout.read, write=timeout.write, pool=timeout.pool) if isinstance(timeout, httpx.Timeout) else timeout,
             )
             self.logger.debug("Received response from image generation API")
             return response
@@ -866,8 +1007,8 @@ class OpenAILLM(BaseLLM):
         previous_response_id: str | Omit | None = omit,
         prompt: ResponsePromptParam | Omit | None = omit,
         prompt_cache_key: str | Omit = omit,
-        prompt_cache_retention: Literal["in-memory", "24h"] | Omit | None = omit,
-        reasoning: Reasoning | Omit | None = None,
+        prompt_cache_retention: Literal["in_memory", "in-memory", "24h"] | Omit | None = omit,
+        reasoning: Reasoning | ReasoningParam | Omit | None = None,
         safety_identifier: str | Omit = omit,
         service_tier: Omit | Literal["auto", "default", "flex", "scale", "priority"] | None = omit,
         store: bool | Omit | None = omit,
@@ -886,6 +1027,8 @@ class OpenAILLM(BaseLLM):
         max_iterations: int = 8,
     ):
         iteration = 0
+        tools = list(tools or [])
+        tool_map, tool_definitions = self._process_tools(tools)
 
         if isinstance(input, str):
             current_input: ResponseInputParam = [{"role": "user", "content": input}]
@@ -894,9 +1037,6 @@ class OpenAILLM(BaseLLM):
 
         while True:
             self.logger.debug(f"generate iteration={iteration} starting; tools_enabled={bool(tools)}")
-
-            tool_definitions = omit
-            tool_map, tool_definitions = self._process_tools(list(tools or []))
 
             response = await self.response(
                 input=current_input,
@@ -943,7 +1083,7 @@ class OpenAILLM(BaseLLM):
             tool_call_names = [getattr(call, "name", "unknown") for call in tool_calls]
             self.logger.debug(f"generate iteration={iteration} processing {len(tool_calls)} tool calls: {tool_call_names}")
 
-            current_input = current_input + tool_calls  # type: ignore
+            current_input = current_input + response.output  # type: ignore
             calls = await self.handle_response_tool_call(response, tool_map)
             if calls:
                 current_input = current_input + calls
@@ -955,13 +1095,13 @@ class OpenAILLM(BaseLLM):
         self,
         response: Response,
         tool_map: dict[str, Callable[..., Any]],
-    ) -> list[FunctionCallOutput] | None:
+    ) -> list[FunctionCallOutput | ResponseCustomToolCallOutputParam] | None:
         tool_calls = self._get_response_tool_calls(response)
         if not tool_calls:
             return None
 
         self.logger.debug(f"Received response tool calls: {[call.model_dump() for call in tool_calls]}")
-        calls: list[FunctionCallOutput] = []
+        calls: list[FunctionCallOutput | ResponseCustomToolCallOutputParam] = []
         for call in tool_calls:
             if isinstance(call, ResponseFunctionToolCall):
                 arguments = self._parse_tool_arguments(call.arguments, call.name)
@@ -976,7 +1116,10 @@ class OpenAILLM(BaseLLM):
 
             tool_result_content = await self._invoke_tool(name, arguments, tool_map)
             self.logger.debug(f"Tool call complete with response: {str(tool_result_content)}")
-            calls.append(FunctionCallOutput(output=str(tool_result_content), call_id=call.call_id, type="function_call_output"))
+            if isinstance(call, ResponseCustomToolCall):
+                calls.append(ResponseCustomToolCallOutputParam(output=str(tool_result_content), call_id=call.call_id, type="custom_tool_call_output"))
+            else:
+                calls.append(FunctionCallOutput(output=str(tool_result_content), call_id=call.call_id, type="function_call_output"))
 
         return calls
 

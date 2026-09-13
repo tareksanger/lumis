@@ -17,11 +17,15 @@ from .pipeline import Pipeline
 from openai import pydantic_function_tool
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
+    ChatCompletionMessage,
+    ChatCompletionMessageFunctionToolCall,
     ChatCompletionMessageParam,
     ChatCompletionSystemMessageParam,
     ChatCompletionToolMessageParam,
     ChatCompletionUserMessageParam,
 )
+from openai.types.chat.parsed_chat_completion import ParsedChatCompletionMessage
+from openai.types.chat.parsed_function_tool_call import ParsedFunctionToolCall
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
@@ -34,7 +38,7 @@ class Queries(BaseModel):
 
 class State(TypedDict):
     question: str
-    answer: str
+    answer: str | None
     references: list[Chunk]
 
     attempt: int
@@ -43,7 +47,7 @@ class State(TypedDict):
 Events = Literal["input", "generate_answer"]
 
 
-class QAResearchPipeline(Pipeline[State, Events]):
+class QAResearchPipeline(Pipeline[State, Events, OpenAILLM]):
     class ErrorMessages:
         EMPTY_QUESTION = "There does not seem to be a valid question. It seems to be am empty string."
         UNABLE = "I am unable to answer your question at this time."
@@ -51,7 +55,7 @@ class QAResearchPipeline(Pipeline[State, Events]):
         UNABLE_TO_ANSWER = "I am unable to answer your question, please try asking something else."
 
         @classmethod
-        def is_error_message(cls, message: str) -> bool:
+        def is_error_message(cls, message: str | None) -> bool:
             return message in [
                 cls.EMPTY_QUESTION,
                 cls.UNABLE,
@@ -105,7 +109,7 @@ class QAResearchPipeline(Pipeline[State, Events]):
             "generate_answer",
             # This allows us to retry, however the assumption here is that we are
             # populating the answer when we reach our max attempts.
-            condition=lambda x: not x.get("answer", None) or self.ErrorMessages.is_error_message(x.get("answer")) and x.get("attempt", 0) < self.max_attempts,
+            condition=lambda x: (not x.get("answer") or self.ErrorMessages.is_error_message(x.get("answer"))) and x.get("attempt", 0) < self.max_attempts,
         )
 
     # TODO: Take configurations to control number of queries and context length? Maybe summarize chunks?
@@ -118,8 +122,8 @@ class QAResearchPipeline(Pipeline[State, Events]):
 
         return new_state
 
-    def _generate_query_messages(self, question):
-        query_messages = []
+    def _generate_query_messages(self, question: str) -> list[ChatCompletionMessageParam]:
+        query_messages: list[ChatCompletionMessageParam] = []
 
         # Add additional system messages based on constructor options
         self._include_datetime(query_messages)
@@ -138,7 +142,7 @@ class QAResearchPipeline(Pipeline[State, Events]):
         new_state: dict = {"attempt": attempt}
 
         # Handle empty tool call (No queries)
-        if tool_call is None:
+        if tool_call is None or response is None:
             if attempt < self.max_attempts:
                 # return without an answer so we can try again
                 return new_state
@@ -156,8 +160,11 @@ class QAResearchPipeline(Pipeline[State, Events]):
 
         try:
             messages = self._generate_answer_messages(question, response, dumped, tool_call)
-            answer_response = await self.llm.completion(messages=messages)
+            answer_response = await self._require_llm().completion(messages=messages)
             answer = answer_response.content
+            if not answer or not answer.strip():
+                new_state["answer"] = self.ErrorMessages.UNABLE_TO_ANSWER
+                return new_state
 
             if self.verbose:
                 print(f"Assistant:\n{answer}")
@@ -173,10 +180,10 @@ class QAResearchPipeline(Pipeline[State, Events]):
     def _generate_answer_messages(
         self,
         question: str,
-        response: ChatCompletionAssistantMessageParam,
+        response: ChatCompletionMessage | ChatCompletionAssistantMessageParam,
         dumped: str,
-        tool_call: object,
-    ):
+        tool_call: ChatCompletionMessageFunctionToolCall,
+    ) -> list[ChatCompletionMessageParam]:
         """
         Generate the list of messages for the OpenAILLM completion based on the question, OpenAILLM response,
         and retrieved chunks, incorporating options like datetime and citations.
@@ -206,12 +213,22 @@ class QAResearchPipeline(Pipeline[State, Events]):
         )
 
         # Add the original AI system message and tool context
-        messages.append(response)
-        messages.append(ChatCompletionToolMessageParam(role="tool", content=dumped, tool_call_id=tool_call.id)) # type: ignore
+        assistant = response if isinstance(response, ChatCompletionMessage) else ChatCompletionMessage.model_validate(response)
+        # SDK parsing metadata is local bookkeeping, not valid request data.
+        messages.append(
+            ChatCompletionAssistantMessageParam(
+                **assistant.model_dump(
+                    include={"role", "content", "refusal", "tool_calls"},
+                    exclude={"tool_calls": {"__all__": {"function": {"parsed_arguments"}}}},
+                    exclude_none=True,
+                )
+            )
+        )
+        messages.append(ChatCompletionToolMessageParam(role="tool", content=dumped, tool_call_id=tool_call.id))
 
         return messages
 
-    async def _create_queries(self, messages: list[ChatCompletionMessageParam]):
+    async def _create_queries(self, messages: list[ChatCompletionMessageParam]) -> tuple[list[str], ParsedFunctionToolCall | None, ParsedChatCompletionMessage[None] | None]:
         """
         Use the OpenAILLM to produce structured queries for the search engine.
         Args:
@@ -220,7 +237,7 @@ class QAResearchPipeline(Pipeline[State, Events]):
             tuple: (Queries, tool_call, response) containing the parsed queries, the tool call details, and the raw OpenAILLM response.
         """
 
-        response = await self.llm.structured_completion(
+        response = await self._require_llm().structured_completion(
             messages=[
                 {
                     "role": "system",
@@ -231,15 +248,15 @@ class QAResearchPipeline(Pipeline[State, Events]):
             tools=[pydantic_function_tool(Queries)],
             tool_choice="required",
             parallel_tool_calls=False,
-        )  # type: ignore
+        )
         queries: list[str] = []
 
-        tool_calls = response.tool_calls
+        tool_calls = response.tool_calls if response is not None else None
         if tool_calls is None or len(tool_calls) == 0:
             return queries, None, response
 
         tool_call = tool_calls[0]
-        queries_response: Queries = tool_call.function.parsed_arguments  # type: ignore
+        queries_response = Queries.model_validate(tool_call.function.parsed_arguments)
         queries = queries_response.queries
 
         return queries, tool_call, response
@@ -257,16 +274,7 @@ class QAResearchPipeline(Pipeline[State, Events]):
 
     def _clean_chunk_for_llm_consumption(self, chunk: Chunk):
         # Ensures that we only display the content and the url to the llm
-        chunk_dict = {**chunk.model_dump()}
-
-        #  Keep only the url from the meta data
-        chunk_dict["metadata"] = {"url": (chunk.metadata or {}).get("url", "")}
-
-        # remove the identifiers
-        chunk_dict.pop("doc_id")
-        chunk_dict.pop("parent_id")
-
-        return chunk_dict
+        return {"content": chunk.content, "metadata": {"url": (chunk.metadata or {}).get("url", "")}}
 
     def _include_datetime(self, messages: list[ChatCompletionMessageParam]):
         if self.include_datetime:

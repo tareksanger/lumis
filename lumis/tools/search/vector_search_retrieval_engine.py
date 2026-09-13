@@ -63,7 +63,7 @@ class VectorSearchRetrievalEngine:
             max_cache_size (int): Maximum number of entries in the cache. Older entries are evicted.
         """
         self.search_engine_client = search_engine_client if search_engine_client is not None else SearchEngineClient()
-        self.scraper = web_scrapper if web_scrapper is not None else WebScrapper(gb_client=gb_client)
+        self.scraper = web_scrapper if web_scrapper is not None else WebScrapper()
 
         self.parser = semantic_parser if semantic_parser is not None else SemanticParser(embedding_model=embedding, breakpoint_percentile_threshold=75)
         self.retriever = similarity_retriever if similarity_retriever is not None else VectorSimilarityRetriever(embedding_model=embedding)
@@ -99,7 +99,7 @@ class VectorSearchRetrievalEngine:
 
         # Fetch search results with error handling
         try:
-            search_results = await self.search_engine_client.search(query, topic=topic, max_results=max_results)
+            search_results = await self.search_engine_client.search(query, topic=topic, max_results=max_results, search_engine=search_engine)
         except Exception as e:
             logger.error(f"Failed to retrieve search results from search engine: {e}")
             return []

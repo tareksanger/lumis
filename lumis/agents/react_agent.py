@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from inspect import iscoroutinefunction
+from inspect import isawaitable
 import logging
-from typing import Any, Callable, Literal, Optional, Union
+from typing import Any, Awaitable, Callable, Literal, Optional
 
 from lumis.agents.base import BaseAgent
 from lumis.llm.openai_llm import OpenAILLM
-from lumis.memory import BaseMemory, SimpleMemory
+from lumis.memory import BaseMemory
 
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, Field
@@ -71,9 +71,9 @@ class ReactAgent(BaseAgent[E]):
         self,
         llm: Optional[OpenAILLM] = None,
         tools: list[Callable] = [],
-        memory: BaseMemory = SimpleMemory(),
+        memory: BaseMemory | None = None,
         parallel_tool_calls: bool = True,
-        finish_condition_callback: Optional[Callable[[], Union[str, None]]] = None,
+        finish_condition_callback: Optional[Callable[[], str | None | Awaitable[str | None]]] = None,
         logger: Optional[logging.Logger] = None,
         verbose: bool = False,
     ):
@@ -102,7 +102,7 @@ class ReactAgent(BaseAgent[E]):
         try:
             if not self.has_initialized:
                 # Inject the default react agent messages with the config messages.
-                default_messages = [
+                default_messages: list[ChatCompletionMessageParam] = [
                     {"role": "system", "content": self.BASE_REACT_PROMPT},
                     {
                         "role": "system",
@@ -113,7 +113,7 @@ class ReactAgent(BaseAgent[E]):
                 await self.memory.prepend(default_messages)
                 self.has_initialized = True
 
-            await self.emit("initialize", self)
+                await self.emit("initialize", self)
             initial_response = await self.llm.structured_completion(response_format=ReActThought, messages=await self.memory.get())
             if initial_response:
                 self.logger.debug("Received initial thought from structured completion.")
@@ -144,7 +144,7 @@ class ReactAgent(BaseAgent[E]):
 
         try:
             # Emit the step event before adding the message to memory.
-            await self.emit("step", self)
+            await self.emit("step", self, thought)
 
             thought_message = f"\nAction: {thought.action}\nThought: {thought.thought}\n"
             if thought.observations:
@@ -160,10 +160,9 @@ class ReactAgent(BaseAgent[E]):
             elif thought.action == "finish":
                 block_finish = False
                 if self.finish_condition_callback:
-                    if iscoroutinefunction(self.finish_condition_callback):
-                        block_finish_message = await self.finish_condition_callback()
-                    else:
-                        block_finish_message = self.finish_condition_callback()
+                    block_finish_message = self.finish_condition_callback()
+                    if isawaitable(block_finish_message):
+                        block_finish_message = await block_finish_message
 
                     if block_finish_message is not None:
                         await self.add_message({"role": "system", "content": block_finish_message})
@@ -231,7 +230,7 @@ class ReactAgent(BaseAgent[E]):
                 self.step_count += 1
                 self.logger.debug(f"Completed step {self.step_count}.")
 
-            if self.step_count >= max_steps:
+            if self.thought is not None and self.step_count >= max_steps:
                 await self.emit("max_steps_reached", self)
                 self.logger.warning(f"Maximum steps reached ({max_steps}). Terminating the run.")
             else:
@@ -265,12 +264,13 @@ class ReactAgent(BaseAgent[E]):
         except Exception as e:
             self.log_exception(e, level=logging.ERROR)
             self.logger.error("Agent act terminated due to an unexpected error.")
-            await self.emit("act_error")
+            await self.emit("act_error", self)
             return None
 
     async def reset(self):
         await self.memory.clear()
         self.thought = None
-        self.steps_count = 0
-        self.has_initialized = None
+        self.step_count = 0
+        self.has_initialized = False
+        await super().reset()
         await self.emit("reset", self)

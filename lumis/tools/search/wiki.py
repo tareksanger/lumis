@@ -13,6 +13,7 @@ from datetime import timedelta
 from decimal import Decimal
 import functools
 import logging
+import threading
 from typing import Any, Callable, List, Optional, Tuple, Union
 
 from lumis.core.common.logger_mixin import LoggerMixin
@@ -20,6 +21,9 @@ import wikipedia
 from wikipedia.exceptions import DisambiguationError, PageError
 
 WikiPage = wikipedia.WikipediaPage
+
+# The wikipedia SDK stores its language in global state.
+_language_lock = threading.RLock()
 
 
 class WikipediaSearcher(LoggerMixin):
@@ -49,13 +53,21 @@ class WikipediaSearcher(LoggerMixin):
 
     def __del__(self):
         """Cleanup resources."""
-        if self._executor:
-            self._executor.shutdown(wait=False)
+        executor = getattr(self, "_executor", None)
+        if executor is not None:
+            executor.shutdown(wait=False)
 
     async def _async_executor(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """Execute a synchronous function asynchronously in the thread pool."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self._executor, functools.partial(func, **kwargs), *args)
+
+    @staticmethod
+    def _call_with_language(func, lang: str, *args, **kwargs):
+        """Keep the SDK language stable for the duration of a request."""
+        with _language_lock:
+            wikipedia.set_lang(lang)
+            return func(*args, **kwargs)
 
     @functools.lru_cache(maxsize=1000, typed=True)
     def _get_page_sync(self, title: str, lang: str = "en") -> Optional[WikiPage]:
@@ -66,8 +78,7 @@ class WikipediaSearcher(LoggerMixin):
         Different language versions of the same title are cached separately due to typed=True.
         """
         try:
-            wikipedia.set_lang(lang)
-            return wikipedia.page(title)
+            return self._call_with_language(wikipedia.page, lang, title)
         except DisambiguationError as e:
             self.logger.warning(f"DisambiguationError for title '{title}': {e.options}")
         except PageError:
@@ -82,11 +93,10 @@ class WikipediaSearcher(LoggerMixin):
 
     async def search(self, query: str, num_results: int = 5, lang: str = "en") -> List[WikiPage]:
         """Search Wikipedia and retrieve page details concurrently."""
-        wikipedia.set_lang(lang)
         self.logger.debug(f"Searching for: '{query}' in {lang}")
 
         try:
-            search_results = await self._async_executor(wikipedia.search, query, num_results)
+            search_results = await self._async_executor(self._call_with_language, wikipedia.search, lang, query, num_results)
             if not search_results:
                 self.logger.warning(f"No results found for: {query}")
                 return []
@@ -104,11 +114,10 @@ class WikipediaSearcher(LoggerMixin):
 
     async def get_random_pages(self, num_pages: int = 1, lang: str = "en") -> List[WikiPage]:
         """Get random Wikipedia pages."""
-        wikipedia.set_lang(lang)
         self.logger.debug(f"Fetching {num_pages} random pages")
 
         try:
-            titles = await self._async_executor(wikipedia.random, num_pages)
+            titles = await self._async_executor(self._call_with_language, wikipedia.random, lang, num_pages)
             titles = [titles] if isinstance(titles, str) else titles
             tasks = [self._get_page(title, lang) for title in titles]
             results = await asyncio.gather(*tasks)
@@ -119,9 +128,8 @@ class WikipediaSearcher(LoggerMixin):
 
     async def get_suggestion(self, query: str, lang: str = "en") -> Optional[str]:
         """Get a search suggestion for the query."""
-        wikipedia.set_lang(lang)
         try:
-            return await self._async_executor(wikipedia.suggest, query)
+            return await self._async_executor(self._call_with_language, wikipedia.suggest, lang, query)
         except Exception as e:
             self.log_exception(e)
             return None
@@ -136,11 +144,10 @@ class WikipediaSearcher(LoggerMixin):
         lang: str = "en",
     ) -> List[WikiPage]:
         """Search for Wikipedia pages near specified coordinates."""
-        wikipedia.set_lang(lang)
         self.logger.debug(f"Geosearch at ({latitude}, {longitude}), radius: {radius}m")
 
         try:
-            titles = await self._async_executor(wikipedia.geosearch, latitude=latitude, longitude=longitude, title=title, results=num_results, radius=radius)
+            titles = await self._async_executor(self._call_with_language, wikipedia.geosearch, lang, latitude=latitude, longitude=longitude, title=title, results=num_results, radius=radius)
             if not titles:
                 return []
 
@@ -153,11 +160,10 @@ class WikipediaSearcher(LoggerMixin):
 
     async def search_with_suggestion(self, query: str, num_results: int = 5, lang: str = "en") -> Tuple[List[WikiPage], Optional[str]]:
         """Search with query suggestions."""
-        wikipedia.set_lang(lang)
         self.logger.debug(f"Search with suggestion: '{query}'")
 
         try:
-            results, suggestion = await self._async_executor(lambda: wikipedia.search(query, results=num_results, suggestion=True))
+            results, suggestion = await self._async_executor(self._call_with_language, wikipedia.search, lang, query, results=num_results, suggestion=True)
             if not results:
                 return [], suggestion
 
@@ -172,8 +178,7 @@ class WikipediaSearcher(LoggerMixin):
     def _get_summary_sync(self, title: str, sentences: int = 0, chars: int = 0, auto_suggest: bool = True, lang: str = "en") -> Optional[str]:
         """Synchronous method to get a page summary with caching."""
         try:
-            wikipedia.set_lang(lang)
-            return wikipedia.summary(title, sentences=sentences, chars=chars, auto_suggest=auto_suggest)
+            return self._call_with_language(wikipedia.summary, lang, title, sentences=sentences, chars=chars, auto_suggest=auto_suggest)
         except (PageError, DisambiguationError) as e:
             self.logger.warning(f"Error getting summary for '{title}': {str(e)}")
             return None

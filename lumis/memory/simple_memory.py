@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Dict
 
 from .base_memory import BaseMemory, BaseMemoryData
 
@@ -30,6 +29,13 @@ class SimpleMemory(BaseMemory):
         self._lock = asyncio.Lock()
         self.max_memory_size = max_memory_size
         self.messages: list[ChatCompletionMessageParam] = messages if messages is not None else []
+
+    def __deepcopy__(self, memo):
+        copied = super().__deepcopy__(memo)
+        # Serialized state excludes synchronization primitives. A copied memory
+        # needs its own unlocked lock so it can be used independently.
+        copied._lock = asyncio.Lock()
+        return copied
 
     async def add(self, message: ChatCompletionMessageParam):
         """
@@ -84,6 +90,10 @@ class SimpleMemory(BaseMemory):
             list[ChatCompletionMessageParam]: The list of retrieved messages.
         """
         async with self._lock:
+            if self.max_memory_size <= 0:
+                return []
+            if self.max_memory_size == 1:
+                return self.messages[-1:]
             if len(self.messages) <= self.max_memory_size:
                 return self.messages.copy()
 

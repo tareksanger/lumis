@@ -10,14 +10,17 @@ from lumis.llm.base_llm import BaseLLM
 
 from .graph import Graph, StateProtocol
 
+from typing_extensions import TypeVar as TypeVarWithDefault
+
 S = TypeVar("S", bound=StateProtocol)
 E = TypeVar("E", bound=str)
+LLMType = TypeVarWithDefault("LLMType", bound=BaseLLM, default=BaseLLM)
 
 
-class Pipeline(EventEmitter[E], LoggerMixin, ABC, Generic[S, E]):
+class Pipeline(EventEmitter[E], LoggerMixin, ABC, Generic[S, E, LLMType]):
     def __init__(
         self,
-        llm: Optional[BaseLLM] = None,
+        llm: Optional[LLMType] = None,
         logger: Optional[logging.Logger] = None,
         verbose: bool = False,
         enable_tracing: bool = False,
@@ -29,6 +32,12 @@ class Pipeline(EventEmitter[E], LoggerMixin, ABC, Generic[S, E]):
         self._graph = Graph[S](enable_tracing=enable_tracing)
         self._initialized = False
         self.build()
+
+    def _require_llm(self) -> LLMType:
+        """Return the configured provider, or fail clearly for LLM-dependent nodes."""
+        if self.llm is None:
+            raise RuntimeError("This pipeline requires an LLM; pass llm= when constructing it.")
+        return self.llm
 
     @property
     def graph(self) -> Graph[S]:

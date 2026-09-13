@@ -27,8 +27,8 @@ class CoreAgent(EventEmitter[E], LoggerMixin, ABC):
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        LoggerMixin.__init__(self, logger=logger)
         EventEmitter.__init__(self)
+        LoggerMixin.__init__(self, logger=logger)
 
         if not llm:
             llm = OpenAILLM()

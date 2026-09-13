@@ -14,10 +14,7 @@ class Ner:
         try:
             from spacy_llm.util import assemble
         except ImportError:
-            raise ImportError(
-                "spacy and spacy-llm are required for Ner. "
-                "Install them with: pip install lumis-ai[spacy]"
-            )
+            raise ImportError("spacy and spacy-llm are required for Ner. Install them with: pip install lumis-ai[spacy]")
         self.nlp = assemble(config)
 
     def get_entities(self, text: str) -> list[tuple[str, str]]:

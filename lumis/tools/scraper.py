@@ -29,10 +29,9 @@ class WebScrapper:
 
     def __init__(
         self,
-
         http_client_factory: Optional[Callable[[], httpx.AsyncClient]] = None,
         max_concurrency: int = 20,  # limit the number of concurrent fetches
-        default_headers: Optional[dict] = {},
+        default_headers: Optional[dict] = None,
     ):
         """
         Initialize the WebScrapper with optional dependency injection.
@@ -44,8 +43,8 @@ class WebScrapper:
         self.http_client_factory = http_client_factory if http_client_factory is not None else lambda: httpx.AsyncClient(timeout=httpx.Timeout(10.0))
         self.semaphore = asyncio.Semaphore(max_concurrency)
 
-        self.default_headers = self.HEADERS
-        self.default_headers.update(default_headers)
+        self.default_headers = self.HEADERS.copy()
+        self.default_headers.update(default_headers or {})
 
     async def batch_fetch_content(self, urls: List[str], metadatas: Optional[List[Dict]] = None) -> List[Document]:
         """
@@ -88,6 +87,7 @@ class WebScrapper:
         url = self._url_with_protocol(url)
 
         documents: list[Document] = []
+        document: Optional[Document] = None
         try:
             async with self.http_client_factory() as client:
                 response = await client.get(
@@ -129,7 +129,6 @@ class WebScrapper:
 
                 else:
                     logger.debug(f"Non-OK status code or no content-type for {url}. Using Gotenberg.")
-
 
         except Exception as e:
             logger.debug(f"Error fetching content from {url} (Using Gotenberg): {str(e)}")
@@ -278,6 +277,7 @@ class WebScrapper:
             raise e
 
         return None
+
     def _url_with_protocol(self, url: str):
         if not url.startswith("http://") and not url.startswith("https://"):
             url = "https://" + url
@@ -314,7 +314,7 @@ class WebScrapper:
 
             # remove URL GET parameters, URL fragments, etc.
             href = parsed_href.scheme + "://" + parsed_href.netloc + parsed_href.path
-            if domain not in href:
+            if parsed_href.netloc.lower() != domain.lower():
                 # not an internal link
                 continue
             urls.add(href)

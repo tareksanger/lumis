@@ -68,7 +68,7 @@ class TextConcisenessAnalyzer:
                 - 'average_sentence_length' (float)
                 - 'average_word_length' (float)
         """
-        sentences = re.split(r"[.!?]+", text)
+        sentences = [sentence for sentence in re.split(r"[.!?]+", text) if sentence.strip()]
         words = re.findall(r"\b\w+\b", text)
 
         avg_sentence_length = len(words) / max(len(sentences), 1) if words else 0

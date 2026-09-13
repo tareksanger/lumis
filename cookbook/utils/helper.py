@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+
 def setup_notebook():
     """
     Sets up the environment for the notebook by applying nest_asyncio,

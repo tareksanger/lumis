@@ -38,13 +38,12 @@ class ArxivResult:
 
 class ArxivSearcher:
     def __init__(self, max_results: int = 10, max_concurrent_pdfs: int = 5) -> None:
+        if max_concurrent_pdfs < 1:
+            raise ValueError("max_concurrent_pdfs must be positive")
         try:
             import arxiv
         except ImportError:
-            raise ImportError(
-                "arxiv is required for ArxivSearcher. "
-                "Install it with: pip install lumis-ai[search]"
-            )
+            raise ImportError("arxiv is required for ArxivSearcher. Install it with: pip install lumis-ai[search]")
         self._arxiv = arxiv
         self.max_results: int = max_results
         self.client = arxiv.Client()
@@ -81,7 +80,7 @@ class ArxivSearcher:
             sort_order = self._arxiv.SortOrder.Descending
 
         # Create search object with all available options
-        search = self._arxiv.Search(query=query, max_results=max_results or self.max_results, sort_by=sort_by, sort_order=sort_order, id_list=id_list or [])
+        search = self._arxiv.Search(query=query, max_results=self.max_results if max_results is None else max_results, sort_by=sort_by, sort_order=sort_order, id_list=id_list or [])
 
         results: list[ArxivResult] = []
         pdf_tasks = []
@@ -157,6 +156,10 @@ class ArxivSearcher:
 
     async def _read_pdf(self, pdf_url: str) -> Optional[Document]:  # noqa: C901
         """Download and parse a PDF from arXiv."""
+        async with self._pdf_semaphore:
+            return await self._download_and_parse_pdf(pdf_url)
+
+    async def _download_and_parse_pdf(self, pdf_url: str) -> Optional[Document]:
         try:
             # Download PDF
             logger.debug(f"Downloading PDF from {pdf_url}")

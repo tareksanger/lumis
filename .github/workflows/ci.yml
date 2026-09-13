@@ -28,5 +28,17 @@ jobs:
         run: uv sync --locked
       - name: Check dependency compatibility
         run: uv pip check
-      - name: Run tests
-        run: uv run --no-sync pytest -q
+      - name: Check LLM typing contracts
+        # Static contracts complement runtime mocks, which cannot detect lost types.
+        run: uv run --no-sync pyright --warnings
+      - name: Run unit tests and coverage
+        run: uv run --no-sync pytest -q --cov --cov-report=term-missing:skip-covered --cov-report=xml --cov-report=html
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-python-${{ matrix.python-version }}
+          path: |
+            coverage.xml
+            htmlcov/
+          if-no-files-found: warn

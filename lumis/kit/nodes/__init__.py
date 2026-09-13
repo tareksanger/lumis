@@ -16,6 +16,7 @@ def __getattr__(name: str):
             stacklevel=2,
         )
         import lumis.pipeline.nodes as _nodes
+
         return getattr(_nodes, _REMAP[name])
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

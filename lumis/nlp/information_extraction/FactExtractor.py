@@ -15,10 +15,7 @@ class FactExtractor:
             from spacy.matcher import Matcher
             from spacy.tokens import Doc
         except ImportError:
-            raise ImportError(
-                "spacy is required for FactExtractor. "
-                "Install it with: pip install lumis-ai[spacy]"
-            )
+            raise ImportError("spacy is required for FactExtractor. Install it with: pip install lumis-ai[spacy]")
 
         # spaCy handles caching and singleton behavior automatically
         self.nlp = spacy.load(model)
@@ -133,7 +130,12 @@ class FactExtractor:
                             if child.dep_ == "agent":
                                 agents = [w for w in child.children if w.dep_ == "pobj"]
                                 if agents:
-                                    subjects.extend(agents)
+                                    passive_subjects = [w for w in subjects if w.dep_ == "nsubjpass"]
+                                    if passive_subjects:
+                                        subjects = agents
+                                        objects.extend(passive_subjects)
+                                    else:
+                                        subjects.extend(agents)
 
                     for subj in subjects:
                         subj_text = self.get_compound_noun(subj)
@@ -159,11 +161,11 @@ class FactExtractor:
         :param token: A spaCy Token object.
         :return: The full noun phrase as a string.
         """
-        parts = [token.text]
+        parts = [token]
         for child in token.children:
             if child.dep_ in ["compound", "amod"]:
-                parts.insert(0, child.text)
-        return " ".join(parts)
+                parts.append(child)
+        return " ".join(part.text for part in sorted(parts, key=lambda part: part.i))
 
     def extract_foundations(self, doc: Doc) -> list[str]:
         """
@@ -194,7 +196,9 @@ class FactExtractor:
         :param text: The text to process.
         :return: A list of fact strings.
         """
-        doc: Doc = self.nlp(text)
+        return self._extract_doc_facts(self.nlp(text))
+
+    def _extract_doc_facts(self, doc: Doc) -> list[str]:
         facts: Set[str] = set()
         # Extract different types of facts
         # facts.update(self.extract_title_relations(doc))
@@ -206,8 +210,9 @@ class FactExtractor:
             fact: str = f"{subj} {verb} {obj}"
             facts.add(fact)
         # Assign facts to the doc's custom extension
-        doc._.facts = facts
-        return list(facts)
+        result = sorted(facts)
+        doc._.facts = result
+        return result
 
     def process(self, text: str) -> Doc:
         """
@@ -216,6 +221,5 @@ class FactExtractor:
         :return: The spaCy Doc object with extracted facts.
         """
         doc: Doc = self.nlp(text)
-        facts: list[str] = self.extract_facts(text)
-        doc._.facts = facts
+        self._extract_doc_facts(doc)
         return doc

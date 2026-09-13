@@ -172,7 +172,6 @@ async def search_arxiv(  # noqa: C901
     summary_semaphore = asyncio.Semaphore(4)
 
     try:
-        
         from arxiv import SortCriterion, SortOrder
 
         sort_criterion = SortCriterion(sort_by)
@@ -188,15 +187,17 @@ async def search_arxiv(  # noqa: C901
 
         # Create tasks for concurrent summarization
         summary_tasks = []
+        summarized_results = []
         for result in results:
             if result.content is None:
                 continue
+            summarized_results.append(result)
             summary_tasks.append(_read_arxiv_pdf(query=query, content=result, summary_length="concise", semaphore=summary_semaphore))
 
         # Wait for all summaries to complete
         if summary_tasks:
             summaries = await asyncio.gather(*summary_tasks, return_exceptions=True)
-            for result, summary in zip(results, summaries):
+            for result, summary in zip(summarized_results, summaries):
                 if isinstance(summary, Exception):
                     logger.error(f"Failed to generate summary: {summary}")
                     result.content = None

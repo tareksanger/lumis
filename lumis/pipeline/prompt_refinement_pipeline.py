@@ -96,7 +96,7 @@ class PromptRefinementState(TypedDict):
     rewrite: Optional[Rewrite]
 
 
-class PromptRefinementPipeline(Pipeline[PromptRefinementState, str]):
+class PromptRefinementPipeline(Pipeline[PromptRefinementState, str, OpenAILLM]):
     def __init__(
         self,
         llm: Optional[OpenAILLM] = None,
@@ -136,7 +136,7 @@ class PromptRefinementPipeline(Pipeline[PromptRefinementState, str]):
         query = state.get("query")
         conversation_history = state.get("conversation_history")
 
-        response = await self.llm.structured_completion(
+        response = await self._require_llm().structured_completion(
             response_format=RewriteResponse,
             model="gpt-4o",
             messages=[

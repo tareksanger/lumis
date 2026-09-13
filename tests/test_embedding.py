@@ -140,9 +140,7 @@ class TestOpenAIEmbeddingModel:
         result = await model.aembed("hello")
 
         assert result.shape == (dim,)
-        model.aclient.embeddings.create.assert_awaited_once_with(
-            model="text-embedding-3-small", input=["hello"]
-        )
+        model.aclient.embeddings.create.assert_awaited_once_with(model="text-embedding-3-small", input=["hello"])
 
     async def test_aembed_list_of_strings(self, model):
         dim = model.dimension

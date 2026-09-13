@@ -35,6 +35,10 @@ class CounterPipeline(Pipeline):
 
 
 class TestPipelineLifecycle:
+    def test_llm_dependent_node_requires_configured_provider(self):
+        with pytest.raises(RuntimeError, match="pass llm="):
+            CounterPipeline()._require_llm()
+
     async def test_run_executes_build_setup_traverse(self):
         p = CounterPipeline()
         await p.run(initial_value=5)
@@ -115,6 +119,7 @@ class TestPipelineGraph:
 class TestTerminateSentinel:
     def test_terminate_is_singleton(self):
         from lumis.pipeline.graph import _Terminate
+
         assert TERMINATE is _Terminate()
 
     def test_terminate_equals_string(self):
@@ -134,6 +139,7 @@ class TestDeprecationShims:
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             from lumis.kit import Graph as KitGraph  # noqa: F401
+
             deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
             assert len(deprecation_warnings) >= 1
 
@@ -141,5 +147,6 @@ class TestDeprecationShims:
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             from lumis.agents.base import GraphBasedAgent  # noqa: F401
+
             deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
             assert len(deprecation_warnings) >= 1

@@ -13,6 +13,7 @@ from pydantic.json_schema import JsonSchemaValue
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 T = TypeVar("T", bound=BaseModel)
+ResponseT = TypeVar("ResponseT")
 
 
 DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
@@ -53,7 +54,9 @@ class OllamaLLM(BaseLLM):
     def client(self) -> AsyncClient:
         return self.__client
 
-    def _count_tokens(self, response: Completion) -> Completion:
+    def _count_tokens(self, response: ResponseT) -> ResponseT:
+        if not isinstance(response, (ChatResponse, GenerateResponse, Mapping)):
+            return response
         try:
             prompt_tokens = response.get("prompt_eval_count")
             completion_tokens = response.get("eval_count")
@@ -162,10 +165,11 @@ class OllamaLLM(BaseLLM):
             )
 
             response = await self._apply_middlewares(response)
-            if not getattr(response, "response", None):
+            response_text = getattr(response, "response", None)
+            if not isinstance(response_text, str) or not response_text:
                 raise ValueError("No response text returned from Ollama")
 
-            return format.model_validate_json(response.response)
+            return format.model_validate_json(response_text)
 
         except Exception as e:
             self.log_exception(e, level=logging.ERROR)

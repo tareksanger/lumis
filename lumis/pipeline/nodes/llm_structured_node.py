@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-from typing import (
-    Optional,
-    Type,
-    TypeVar,
-)
+from typing import Generic, Optional, Type, TypeVar
 
 from lumis.core.common.logger_mixin import LoggerMixin
 from lumis.core.utils.types import BaseSchema
@@ -12,12 +8,12 @@ from lumis.llm import OpenAILLM
 from lumis.memory.base_memory import BaseMemory
 from lumis.memory.simple_memory import SimpleMemory
 
-from ..graph import TERMINATE, S
+from ..graph import StateProtocol, TERMINATE
 
 T = TypeVar("T", bound=BaseSchema)
 
 
-class LLMStructuredNode(LoggerMixin):
+class LLMStructuredNode(LoggerMixin, Generic[T]):
     def __init__(self, llm: OpenAILLM, response_format: Type[T], state_key: str, system_prompt: Optional[str] = None, add_result_to_memory: bool = True, verbose: bool = False, *arg, **kwargs):
         LoggerMixin.__init__(self)
         self.llm = llm
@@ -28,7 +24,7 @@ class LLMStructuredNode(LoggerMixin):
 
         self.verbose = verbose
 
-    def _get_memory(self, state: S):
+    def _get_memory(self, state: StateProtocol) -> BaseMemory:
         memory = state.get("memory", None)
 
         if not isinstance(memory, BaseMemory):
@@ -40,10 +36,10 @@ class LLMStructuredNode(LoggerMixin):
 
         return memory
 
-    async def __call__(self, state: S):
+    async def __call__(self, state: StateProtocol):
         return await self.call_llm(state)
 
-    async def call_llm(self, state: S):  # noqa: C901
+    async def call_llm(self, state: StateProtocol):  # noqa: C901
         memory = self._get_memory(state)
         messages = await memory.get()
 
@@ -68,9 +64,9 @@ class LLMStructuredNode(LoggerMixin):
             # TEMP
             return TERMINATE
 
-        updated_state = {"memory": memory}
+        updated_state: dict[str, BaseMemory | T] = {"memory": memory}
 
         if content is not None:
-            updated_state[self.state_key] = content  # type: ignore
+            updated_state[self.state_key] = content
 
         return updated_state

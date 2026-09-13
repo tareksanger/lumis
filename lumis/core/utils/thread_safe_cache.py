@@ -22,6 +22,8 @@ class ThreadSafeCache(Generic[T]):
         Args:
             max_size (int): The maximum number of items to store in the cache. Defaults to 100.
         """
+        if max_size < 0:
+            raise ValueError("max_size must be non-negative")
         self._lock = threading.Lock()
         self._cache: "OrderedDict[str, T]" = OrderedDict()
         self.max_size = max_size
@@ -66,8 +68,14 @@ class ThreadSafeCache(Generic[T]):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ThreadSafeCache):
             return NotImplemented
-        with self._lock, other._lock:
-            return list(self._cache.items()) == list(other._cache.items())
+        if self is other:
+            return True
+        # Hold both caches stable for one atomic comparison. A consistent order
+        # prevents reversed comparisons from acquiring the locks in opposition.
+        first, second = (self, other) if id(self) < id(other) else (other, self)
+        with first._lock:
+            with second._lock:
+                return self._cache == other._cache
 
     def get_content(self, key: str) -> Optional[T]:
         with self._lock:

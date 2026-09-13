@@ -42,13 +42,20 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then run:
 
 ```bash
 uv sync --locked
+uv run --no-sync pyright --warnings
 uv run --no-sync pytest -q
+uv run --no-sync pytest -q --cov --cov-report=html --cov-report=term-missing:skip-covered
 uv build
 uvx twine check --strict dist/*
 ```
 
 CI runs the tests on Python 3.11, 3.12, and 3.13 for pull requests and pushes to
-`main`. Provider calls in the tests are mocked; no API keys are required.
+`main`, enforces 90% combined line/branch coverage, and uploads HTML/XML coverage
+reports for each Python version. The local HTML report is `htmlcov/index.html`.
+CI also checks the LLM-facing typing contracts, including structured response types.
+Provider calls in the tests are mocked and outbound network connections are
+blocked; no API keys, model downloads, Redis server, or database server are required.
+See [the testing guide](tests/README.md) for test sections and regression notes.
 
 ## Publishing a release
 

@@ -19,6 +19,7 @@ def __getattr__(name: str):
             stacklevel=2,
         )
         import lumis.pipeline.graph as _graph
+
         return getattr(_graph, _REMAP[name])
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

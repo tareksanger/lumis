@@ -14,10 +14,7 @@ class PyTrends:
         try:
             from pytrends.request import TrendReq
         except ImportError:
-            raise ImportError(
-                "pytrends is required for PyTrends. "
-                "Install it with: pip install lumis-ai[search]"
-            )
+            raise ImportError("pytrends is required for PyTrends. Install it with: pip install lumis-ai[search]")
         self.pytrends = TrendReq(retries=retries, backoff_factor=backoff, tz=tz)  # type: ignore
 
     @sync_to_async

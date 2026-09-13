@@ -56,10 +56,7 @@ class YahooFinance:
         try:
             import yfinance as yf
         except ImportError:
-            raise ImportError(
-                "yfinance is required for YahooFinance. "
-                "Install it with: pip install lumis-ai[search]"
-            )
+            raise ImportError("yfinance is required for YahooFinance. Install it with: pip install lumis-ai[search]")
         self._yf = yf
 
     @sync_to_async

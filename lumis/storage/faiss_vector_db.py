@@ -40,12 +40,9 @@ class FaissVectorDB(BaseVectorDB):
 
         # Create the FAISS index
         if index_type == "IndexFlatL2":
-            # Use IndexHNSWFlat for better scalability and deletion support
-            self.index = faiss.IndexHNSWFlat(self.dimension, 32)
+            self.index = faiss.IndexFlatL2(self.dimension)
         elif index_type == "IndexFlatIP":
-            # Use IndexHNSWFlat with Inner Product
-            self.index = faiss.IndexHNSWFlat(self.dimension, 32)
-            self.index.metric_type = faiss.METRIC_INNER_PRODUCT
+            self.index = faiss.IndexFlatIP(self.dimension)
         else:
             raise ValueError(f"Unsupported index type: {index_type}")
 
@@ -122,6 +119,11 @@ class FaissVectorDB(BaseVectorDB):
                 faiss.normalize_L2(embeddings_array)
 
             self.index.add_with_ids(embeddings_array, ids_array)  # type: ignore
+
+            # Reranking needs the same vectors for every returned chunk,
+            # including chunks whose embeddings were generated during insertion.
+            for chunk, vector in zip(batch, embeddings_array):
+                chunk.embedding = vector.copy()
 
             offset += batch_size
 
@@ -231,8 +233,7 @@ class FaissVectorDB(BaseVectorDB):
             results.append(chunk)
 
         print(f"Search results count: {len(results)}")
-        if rerank.lower() == "mmr":
-            # TODO: Chunk embeddings might be None, handle that case find another way to get the embeddings (or save them to the check on add?)
+        if rerank.lower() == "mmr" and results:
             order = self._mmr(query_embedding[0], np.vstack([chunk.embedding for chunk in results if chunk.embedding is not None]).astype("float32"), lambda_=lambda_, top_n=k)
             results = [results[i] for i in order]
 
@@ -273,13 +274,23 @@ class FaissVectorDB(BaseVectorDB):
             id_map_path (str): Path to the ID map.
         """
         self.index = faiss.read_index(index_path)
-        if self.use_gpu:
-            self.index = faiss.index_cpu_to_all_gpus(self.index)
         with open(id_map_path, "rb") as f:
             data = pickle.load(f)
             self.id_map = data["id_map"]
             self.chunk_id_to_faiss_id = data["chunk_id_to_faiss_id"]
             self.next_id = data["next_id"]
+
+        # Legacy metadata omitted generated embeddings. Recover only missing
+        # vectors from their internal rows, preserving external IDs for MMR.
+        if isinstance(self.index, faiss.IndexIDMap):
+            inner = faiss.downcast_index(self.index.index)
+            for position, faiss_id in enumerate(faiss.vector_to_array(self.index.id_map)):
+                chunk = self.id_map.get(int(faiss_id))
+                if chunk is not None and chunk.embedding is None:
+                    chunk.embedding = inner.reconstruct(position)
+
+        if self.use_gpu:
+            self.index = faiss.index_cpu_to_all_gpus(self.index)
 
     def delete_chunk(self, chunk: Chunk):
         """
@@ -290,7 +301,21 @@ class FaissVectorDB(BaseVectorDB):
         """
         faiss_id = self.chunk_id_to_faiss_id.get(chunk.doc_id)
         if faiss_id is not None:
-            self.index.remove_ids(np.array([faiss_id], dtype="int64"))
+            index = self.index
+            if isinstance(index, faiss.IndexIDMap):
+                inner = faiss.downcast_index(index.index)
+                if isinstance(inner, faiss.IndexHNSWFlat):
+                    # Older releases persisted HNSW indexes, which cannot remove
+                    # vectors. Rebuild once from their stored vectors and exact
+                    # external IDs, without calling the embedding provider.
+                    vectors = inner.reconstruct_n(0, inner.ntotal)
+                    ids = faiss.vector_to_array(index.id_map)
+                    flat = faiss.IndexFlatIP(inner.d) if inner.metric_type == faiss.METRIC_INNER_PRODUCT else faiss.IndexFlatL2(inner.d)
+                    index = faiss.IndexIDMap(flat)
+                    index.add_with_ids(vectors, ids)
+
+            index.remove_ids(np.array([faiss_id], dtype="int64"))
+            self.index = index
             del self.id_map[faiss_id]
             del self.chunk_id_to_faiss_id[chunk.doc_id]
 
@@ -314,7 +339,7 @@ class FaissVectorDB(BaseVectorDB):
 
         while candidate_indices and len(selected) < top_n:
             best_idx = None
-            best_score = -1.0
+            best_score = float("-inf")
 
             for i in candidate_indices:
                 # similarity to query

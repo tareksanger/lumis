@@ -319,11 +319,11 @@ class ResearchAgentHooks(AgentHooks[TContext]):
             source = self._handle_arxiv_source(item, tool_name)
         elif "wiki" in tool_name:
             source = self._handle_wiki_source(item, tool_name)
+        elif "openai" in tool_name:
+            # Match the provider before the generic "web" substring.
+            source = self._handle_openai_web_source(item, tool_name)
         elif "web" in tool_name or "gemini" in tool_name:
             source = self._handle_gemini_source(item, tool_name)
-        elif "openai" in tool_name:
-            # OpenAI web search
-            source = self._handle_openai_web_source(item, tool_name)
         else:
             logger.warning(f"Unknown tool name: {tool_name}")
 

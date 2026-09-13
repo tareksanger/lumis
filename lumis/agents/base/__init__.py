@@ -13,6 +13,7 @@ def __getattr__(name: str):
             stacklevel=2,
         )
         from lumis.pipeline.pipeline import Pipeline
+
         return Pipeline
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

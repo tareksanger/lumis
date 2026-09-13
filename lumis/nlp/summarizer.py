@@ -175,7 +175,8 @@ class Summarizer:
         for sentence in sentences:
             if not sentence.strip():
                 continue  # Skip empty sentences
-            sentence += ". "  # Add back the period
+            sentence = sentence.rstrip()
+            sentence += " " if sentence.endswith((".", "!", "?")) else ". "
             sentence_length = len(self.tokenizer.encode(sentence, add_special_tokens=False))
 
             if current_length + sentence_length <= self.max_model_length:
